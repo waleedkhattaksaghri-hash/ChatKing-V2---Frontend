@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(mkdir -p \"C:/Users/4star/Desktop/chatking-api\" && cd \"C:/Users/4star/Desktop/chatking-api\" && npm init -y)",
+      "Bash(cd \"C:/Users/4star/Desktop/chatking-api\" && railway login)",
+      "Bash(find \"C:/Users/4star/Desktop/chatking-api/routes\" -type f -name \"*.js\" -o -name \"*.jsx\" -o -name \"*.ts\" -o -name \"*.tsx\" 2>/dev/null | head -50)"
+    ]
+  }
+}
