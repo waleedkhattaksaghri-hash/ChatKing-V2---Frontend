@@ -237,9 +237,12 @@ export function SOPs({ t, accent }) {
     }
   }
 
+  const clientId = getActiveClientId();
+
   useEffect(() => {
+    if (!clientId) return;
     load();
-  }, []);
+  }, [clientId]);
 
   const grouped = useMemo(() => {
     const groups = issueTypes.map((issueType) => ({

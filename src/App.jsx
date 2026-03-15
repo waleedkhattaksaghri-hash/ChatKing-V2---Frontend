@@ -1558,19 +1558,6 @@ export default function ChatKing() {
   const accent = acc.color;
   const font   = FONT_OPTIONS[fontIdx].name;
 
-  if (!authChecked || !authenticated) {
-    return (
-      <AdminLoginScreen
-        t={t}
-        accent={accent}
-        status={{ checking: !authChecked }}
-        onRequestCode={handleRequestLoginCode}
-        onVerifyCode={handleVerifyLoginCode}
-        onLegacyLogin={handleLegacyTokenLogin}
-      />
-    );
-  }
-
   useEffect(() => {
     const h = e => { if (themeRef.current && !themeRef.current.contains(e.target)) setShowTheme(false); };
     document.addEventListener("mousedown", h);
@@ -1594,6 +1581,19 @@ export default function ChatKing() {
       root.removeAttribute("data-theme");
     };
   }, [acc.glow, darkMode, t.bg, t.bgSolid, t.text]);
+
+  if (!authChecked || !authenticated) {
+    return (
+      <AdminLoginScreen
+        t={t}
+        accent={accent}
+        status={{ checking: !authChecked }}
+        onRequestCode={handleRequestLoginCode}
+        onVerifyCode={handleVerifyLoginCode}
+        onLegacyLogin={handleLegacyTokenLogin}
+      />
+    );
+  }
 
   const navGroups = [
     {

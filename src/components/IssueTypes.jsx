@@ -207,9 +207,12 @@ export function IssueTypes({ t, accent }) {
     setLoading(false);
   }
 
+  const clientId = getActiveClientId();
+
   useEffect(() => {
+    if (!clientId) return;
     loadRows();
-  }, []);
+  }, [clientId]);
 
   const aiPreview = useMemo(() => rows.map((row) => buildIssueTypeAiConfig(row)), [rows]);
   const editingRow = rows.find((row) => row.id === editingRowId) || null;

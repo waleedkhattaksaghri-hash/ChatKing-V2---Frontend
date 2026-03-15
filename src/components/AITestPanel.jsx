@@ -119,13 +119,19 @@ export function AITestPanel({ t, accent }) {
     }
   }
 
+  const clientId = getActiveClientId();
+
   useEffect(() => {
+    if (!clientId) return;
+    setActiveSessionId("");
+    setMessages([]);
+    setLastReply("");
     loadSessions();
-  }, []);
+  }, [clientId]);
 
   useEffect(() => {
     loadMessages(activeSessionId);
-  }, [activeSessionId]);
+  }, [activeSessionId, clientId]);
 
   async function handleCreateSession() {
     setCreatingSession(true);
