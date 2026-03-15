@@ -11,6 +11,7 @@ import {
   validateIssueType,
 } from "../lib/issueTypes";
 import { Card, Pill, SectionHeader } from "./ui";
+import { ContentTestModal } from "./ContentTestModal";
 
 const ISSUE_TYPE_PAGE_FIELDS = [
   "Name",
@@ -185,6 +186,7 @@ export function IssueTypes({ t, accent }) {
   const [errorsById, setErrorsById] = useState({});
   const [requestError, setRequestError] = useState("");
   const [linkedSopCounts, setLinkedSopCounts] = useState({});
+  const [testingRow, setTestingRow] = useState(null);
 
   async function loadRows() {
     setLoading(true);
@@ -410,6 +412,13 @@ export function IssueTypes({ t, accent }) {
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                         <button
                           type="button"
+                          onClick={() => setTestingRow(row)}
+                          style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
+                        >
+                          Test
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setEditingRowId(row.id)}
                           style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
                         >
@@ -446,6 +455,18 @@ export function IssueTypes({ t, accent }) {
         />
       )}
 
+      {testingRow?.persistedId && (
+        <ContentTestModal
+          title="Test Issue Type"
+          itemType="Issue Type"
+          itemLabel={testingRow.name.trim() || "Untitled Issue Type"}
+          endpoint={`/api/issue-types/${testingRow.persistedId}/test`}
+          t={t}
+          accent={accent}
+          onClose={() => setTestingRow(null)}
+        />
+      )}
+
       <Card t={t} style={{ padding: "18px 20px", marginTop: "20px" }}>
         <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
           AI Config Preview
@@ -457,3 +478,6 @@ export function IssueTypes({ t, accent }) {
     </div>
   );
 }
+
+
+

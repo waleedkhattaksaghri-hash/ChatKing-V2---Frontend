@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiJson, getActiveClientId } from "../lib/api";
 import { Card, Pill, SectionHeader } from "./ui";
+import { ContentTestModal } from "./ContentTestModal";
 
 function formatTriggerConditions(value) {
   if (!value) return "";
@@ -213,6 +214,7 @@ export function SOPs({ t, accent }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingIds, setSavingIds] = useState({});
+  const [testingSop, setTestingSop] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -422,6 +424,13 @@ export function SOPs({ t, accent }) {
                               <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                                 <button
                                   type="button"
+                                  onClick={() => setTestingSop(sop)}
+                                  style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
+                                >
+                                  Test
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => setEditingSopId(sop.id)}
                                   style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
                                 >
@@ -499,12 +508,19 @@ export function SOPs({ t, accent }) {
                             </div>
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                               <button
-                                type="button"
-                                onClick={() => setEditingSopId(sop.id)}
-                                style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
-                              >
-                                Edit
-                              </button>
+                                  type="button"
+                                  onClick={() => setTestingSop(sop)}
+                                  style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
+                                >
+                                  Test
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingSopId(sop.id)}
+                                  style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: "pointer" }}
+                                >
+                                  Edit
+                                </button>
                               <button
                                 type="button"
                                 onClick={() => deleteSop(sop)}
@@ -537,6 +553,21 @@ export function SOPs({ t, accent }) {
           onClose={() => setEditingSopId(null)}
         />
       )}
+
+      {testingSop?.persistedId && (
+        <ContentTestModal
+          title="Test SOP"
+          itemType="SOP"
+          itemLabel={testingSop.title.trim() || "Untitled SOP"}
+          endpoint={`/api/sops/${testingSop.persistedId}/test`}
+          t={t}
+          accent={accent}
+          onClose={() => setTestingSop(null)}
+        />
+      )}
     </div>
   );
 }
+
+
+

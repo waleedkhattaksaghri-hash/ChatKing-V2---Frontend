@@ -4,6 +4,7 @@ import { runBackgroundJobFlow } from "../lib/backgroundJobs";
 import { useApi } from "../lib/useApi";
 import { AIInsightsPanel } from "./AIInsightsPanel";
 import { Card, JobStatusNotice, SectionHeader, Tag } from "./ui";
+import { ContentTestModal } from "./ContentTestModal";
 
 function ArticleEditModal({ article, isPublished, t, accent, onSave, onClose }) {
   const [title,   setTitle]   = useState(article.title   || "");
@@ -123,6 +124,7 @@ export function KnowledgeBase({ t, accent }) {
   const [articles, setArticles]       = useState([]);
   const [generating, setGenerating]   = useState(false);
   const [saveStatus, setSaveStatus]   = useState({});
+  const [testingArticle, setTestingArticle] = useState(null);
   // Connect source modal
   const [showConnect, setShowConnect] = useState(false);
   const [connectUrl, setConnectUrl]   = useState("");
@@ -372,6 +374,9 @@ export function KnowledgeBase({ t, accent }) {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                    <button onClick={() => setTestingArticle(article)}
+                      style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "6px",
+                        color: t.textSub, fontSize: "11px", padding: "5px 10px", cursor: "pointer" }}>Test</button>
                     <button onClick={() => setEditingArticle({ article, isPublished: false })}
                       style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "6px",
                         color: t.textSub, fontSize: "11px", padding: "5px 10px", cursor: "pointer" }}>Edit</button>
@@ -431,6 +436,9 @@ export function KnowledgeBase({ t, accent }) {
                 <span style={{ fontSize: "11px", color: t.textMuted, fontFamily: "'DM Mono', monospace" }}>
                   {article.lookups || 0} lookups
                 </span>
+                <button onClick={() => setTestingArticle(article)}
+                  style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "6px",
+                    color: t.textSub, fontSize: "11px", padding: "4px 10px", cursor: "pointer" }}>Test</button>
                 <button onClick={() => setEditingArticle({ article, isPublished: true })}
                   style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "6px",
                     color: t.textSub, fontSize: "11px", padding: "4px 10px", cursor: "pointer" }}>Edit</button>
@@ -808,8 +816,23 @@ export function KnowledgeBase({ t, accent }) {
           onSave={handleSaveArticle} onClose={() => setEditingArticle(null)} />
       )}
 
+      {testingArticle?.id && (
+        <ContentTestModal
+          title="Test Knowledge Article"
+          itemType="Knowledge Base"
+          itemLabel={testingArticle.title || "Untitled Article"}
+          endpoint={`/api/knowledge/${testingArticle.id}/test`}
+          t={t}
+          accent={accent}
+          onClose={() => setTestingArticle(null)}
+        />
+      )}
+
       {/* ── AI Insights from database ── */}
       <AIInsightsPanel t={t} accent={accent} />
     </div>
   );
 }
+
+
+
