@@ -19,12 +19,14 @@ function summarizePreview(preview) {
   if (!preview) return null;
   const selectedSop = preview?.evidence_bundle?.source_selection?.selected_sop || preview?.source_selection?.selected_sop || null;
   const selectedArticle = preview?.evidence_bundle?.source_selection?.selected_article || preview?.source_selection?.selected_article || null;
+  const selectedMemory = preview?.evidence_bundle?.memory_candidates?.[0] || preview?.memory_candidates?.[0] || null;
   return {
     mode: preview?.source_selection?.mode || preview?.evidence_bundle?.source_selection?.mode || null,
     reply: preview?.ai_data?.response || "",
     issueTypeName: preview?.classification?.matched_issue_type_name || null,
     selectedSopTitle: selectedSop?.title || null,
     selectedArticleTitle: selectedArticle?.title || null,
+    selectedMemoryTitle: selectedMemory?.title || null,
     telemetry: preview?.telemetry || null,
     sourceSelection: preview?.source_selection || null,
   };
@@ -64,6 +66,18 @@ function buildFailureReasons({ itemType, diagnostics, primarySummary, forcedSumm
     }
     if (compareForced && forcedSummary?.reply && forcedSummary.reply !== primarySummary.reply) {
       reasons.push("Forcing this article changed the final answer. That usually means the article contains useful evidence, but the retrieval ranking did not elevate it high enough.");
+    }
+  }
+
+  if (itemType === "Client Memory") {
+    if (diagnostics.included_as_candidate === false) {
+      reasons.push("This memory entry was not retrieved into the candidate set. That usually means the stored phrasing does not line up strongly enough with the customer message yet.");
+    }
+    if (diagnostics.included_as_candidate && diagnostics.selected === false) {
+      reasons.push(`This memory entry was retrieved but another memory or stronger SOP/KB evidence led the final answer instead of ${diagnostics.selected_memory_title || primarySummary.selectedMemoryTitle || "this memory"}.`);
+    }
+    if (compareForced && forcedSummary?.reply && forcedSummary.reply !== primarySummary.reply) {
+      reasons.push("Forcing this memory changed the final answer. That usually means the memory is useful, but the live retrieval or evidence ranking is not elevating it strongly enough.");
     }
   }
 
@@ -117,6 +131,7 @@ function ResultPanel({ heading, summary, diagnostics, testedItem, t, accent }) {
           {summary?.issueTypeName && <div><strong style={{ color: t.text }}>Matched Issue Type:</strong> {summary.issueTypeName}</div>}
           {summary?.selectedSopTitle && <div><strong style={{ color: t.text }}>Selected SOP:</strong> {summary.selectedSopTitle}</div>}
           {summary?.selectedArticleTitle && <div><strong style={{ color: t.text }}>Selected KB:</strong> {summary.selectedArticleTitle}</div>}
+          {summary?.selectedMemoryTitle && <div><strong style={{ color: t.text }}>Selected Memory:</strong> {summary.selectedMemoryTitle}</div>}
         </div>
       </Card>
 
@@ -284,4 +299,4 @@ export function ContentTestModal({ title, endpoint, itemType, itemLabel, t, acce
       </Card>
     </div>
   );
-}
+}
