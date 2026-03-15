@@ -20,7 +20,17 @@ const ISSUE_TYPE_PAGE_FIELDS = [
   "Escalation rules",
 ];
 
-export function IssueTypeEditorCard({ row, t, accent, errors, saving, linkedSopCount, onChange, onDelete, onSave }) {
+function normalizeLinkedSop(record = {}) {
+  return {
+    id: record.id || `sop-${Math.random().toString(36).slice(2, 7)}` ,
+    persistedId: record.id || null,
+    title: record.title || record.name || "Untitled SOP",
+    issue_type_id: record.issue_type_id || "",
+    status: record.status || (record.active ? "active" : "draft"),
+  };
+}
+
+export function IssueTypeEditorCard({ row, t, accent, errors, saving, linkedSopCount, onChange, onDelete, onSave, onManageLinks }) {
   const inputStyle = {
     width: "100%",
     background: t.surfaceHover,
@@ -48,7 +58,14 @@ export function IssueTypeEditorCard({ row, t, accent, errors, saving, linkedSopC
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Pill color={accent}>{linkedSopCount} linked SOP{linkedSopCount === 1 ? "" : "s"}</Pill>
+          <button
+            type="button"
+            onClick={onManageLinks}
+            disabled={!row.persistedId}
+            style={{ background: "none", border: "none", padding: 0, cursor: row.persistedId ? "pointer" : "default", opacity: row.persistedId ? 1 : 0.55 }}
+          >
+            <Pill color={accent}>{linkedSopCount} linked SOP{linkedSopCount === 1 ? "" : "s"}</Pill>
+          </button>
           {row.isDirty && <Pill color={accent}>Unsaved</Pill>}
           <button
             type="button"
@@ -145,7 +162,7 @@ export function IssueTypeEditorCard({ row, t, accent, errors, saving, linkedSopC
   );
 }
 
-function IssueTypeEditorModal({ row, t, accent, errors, saving, linkedSopCount, onChange, onDelete, onSave, onClose }) {
+function IssueTypeEditorModal({ row, t, accent, errors, saving, linkedSopCount, onChange, onDelete, onSave, onManageLinks, onClose }) {
   return (
     <div
       style={{
@@ -172,20 +189,118 @@ function IssueTypeEditorModal({ row, t, accent, errors, saving, linkedSopCount, 
           onChange={onChange}
           onDelete={onDelete}
           onSave={onSave}
+          onManageLinks={onManageLinks}
         />
       </div>
     </div>
   );
 }
 
+
+function LinkedSopsModal({ issueType, linkedSops, availableSops, selectedSopId, linkLoading, error, t, accent, onSelectSop, onLink, onUnlink, onDeleteSop, onClose }) {
+  const buttonStyle = {
+    background: "none",
+    border: `1px solid ${t.border}`,
+    borderRadius: "8px",
+    color: t.textSub,
+    fontSize: "12px",
+    fontWeight: "700",
+    padding: "7px 12px",
+    cursor: "pointer",
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(3, 8, 20, 0.72)",
+        backdropFilter: "blur(8px)",
+        zIndex: 2050,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+      }}
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <Card t={t} style={{ width: "100%", maxWidth: "920px", maxHeight: "90vh", overflowY: "auto", padding: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", marginBottom: "16px" }}>
+          <div>
+            <div style={{ fontSize: "20px", fontWeight: "800", color: t.text, letterSpacing: "-0.03em" }}>
+              Linked SOPs
+            </div>
+            <div style={{ fontSize: "12px", color: t.textSub, marginTop: "5px" }}>
+              Manage SOPs connected to {issueType.name || "this issue type"}. Link an existing SOP, remove the link, or delete the SOP entirely.
+            </div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: t.textMuted, fontSize: "22px", cursor: "pointer" }}>?</button>
+        </div>
+
+        <Card t={t} style={{ padding: "16px", marginBottom: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "10px", alignItems: "end" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: t.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "8px" }}>
+                Link Existing SOP
+              </label>
+              <select value={selectedSopId} onChange={(event) => onSelectSop(event.target.value)} style={{ width: "100%", minHeight: "46px", background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "12px", color: t.text, padding: "10px 12px", boxSizing: "border-box" }}>
+                <option value="">Select an unlinked SOP</option>
+                {availableSops.map((sop) => (
+                  <option key={sop.id} value={sop.persistedId || sop.id}>{sop.title}</option>
+                ))}
+              </select>
+            </div>
+            <button type="button" onClick={onLink} disabled={!selectedSopId || linkLoading} style={{ background: !selectedSopId || linkLoading ? `${accent}88` : accent, border: "none", borderRadius: "10px", color: "#fff", fontSize: "12px", fontWeight: "700", padding: "11px 16px", cursor: !selectedSopId || linkLoading ? "not-allowed" : "pointer" }}>
+              {linkLoading ? "Linking..." : "Link SOP"}
+            </button>
+          </div>
+          {!!error && (
+            <div style={{ marginTop: "12px", padding: "10px 12px", borderRadius: "10px", border: "1px solid #FB718544", background: "#FB718514", color: "#FB7185", fontSize: "12px" }}>
+              {error}
+            </div>
+          )}
+        </Card>
+
+        <Card t={t} style={{ padding: 0 }}>
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontSize: "13px", fontWeight: "700", color: t.text }}>
+            {linkedSops.length} linked SOP{linkedSops.length === 1 ? "" : "s"}
+          </div>
+          {!linkedSops.length ? (
+            <div style={{ padding: "18px 16px", fontSize: "12px", color: t.textMuted }}>
+              No SOPs are linked to this issue type yet.
+            </div>
+          ) : (
+            linkedSops.map((sop, index) => (
+              <div key={sop.id} style={{ padding: "16px", borderBottom: index < linkedSops.length - 1 ? `1px solid ${t.borderLight}` : "none", display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: t.text, marginBottom: "6px" }}>{sop.title}</div>
+                  <div style={{ fontSize: "12px", color: t.textSub }}>{sop.status || "draft"}</div>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                  <button type="button" onClick={() => onUnlink(sop)} style={buttonStyle}>Remove Link</button>
+                  <button type="button" onClick={() => onDeleteSop(sop)} style={{ ...buttonStyle, border: "1px solid #FB718544", color: "#FB7185" }}>Delete SOP</button>
+                </div>
+              </div>
+            ))
+          )}
+        </Card>
+      </Card>
+    </div>
+  );
+}
+
 export function IssueTypes({ t, accent }) {
   const [rows, setRows] = useState([]);
+  const [sops, setSops] = useState([]);
   const [editingRowId, setEditingRowId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingIds, setSavingIds] = useState({});
   const [errorsById, setErrorsById] = useState({});
   const [requestError, setRequestError] = useState("");
-  const [linkedSopCounts, setLinkedSopCounts] = useState({});
+  const [managingLinksRowId, setManagingLinksRowId] = useState(null);
+  const [selectedLinkSopId, setSelectedLinkSopId] = useState("");
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState("");
   const [testingRow, setTestingRow] = useState(null);
 
   async function loadRows() {
@@ -197,13 +312,7 @@ export function IssueTypes({ t, accent }) {
       apiFetch(`/api/sops?client_id=${clientId}`),
     ]);
     setRows((data || []).map(normalizeIssueTypeRecord));
-    const counts = {};
-    for (const sop of Array.isArray(sopData) ? sopData : []) {
-      if (sop.issue_type_id) {
-        counts[sop.issue_type_id] = (counts[sop.issue_type_id] || 0) + 1;
-      }
-    }
-    setLinkedSopCounts(counts);
+    setSops((Array.isArray(sopData) ? sopData : []).map(normalizeLinkedSop));
     setLoading(false);
   }
 
@@ -215,7 +324,17 @@ export function IssueTypes({ t, accent }) {
   }, [clientId]);
 
   const aiPreview = useMemo(() => rows.map((row) => buildIssueTypeAiConfig(row)), [rows]);
+  const linkedSopCounts = useMemo(() => {
+    const counts = {};
+    for (const sop of sops) {
+      if (sop.issue_type_id) counts[sop.issue_type_id] = (counts[sop.issue_type_id] || 0) + 1;
+    }
+    return counts;
+  }, [sops]);
   const editingRow = rows.find((row) => row.id === editingRowId) || null;
+  const managingLinksRow = rows.find((row) => row.id === managingLinksRowId) || null;
+  const linkedSopsForRow = useMemo(() => managingLinksRow?.persistedId ? sops.filter((sop) => sop.issue_type_id === managingLinksRow.persistedId) : [], [sops, managingLinksRow]);
+  const availableSopsForLink = useMemo(() => sops.filter((sop) => !sop.issue_type_id || sop.issue_type_id === managingLinksRow?.persistedId), [sops, managingLinksRow]);
 
   function handleChange(rowId, field, value) {
     setRows((current) => updateIssueTypeField(current, rowId, field, value));
@@ -247,6 +366,7 @@ export function IssueTypes({ t, accent }) {
       setRows((current) => mergeSavedIssueType(current, saved));
       setErrorsById((current) => ({ ...current, [row.id]: {} }));
       setEditingRowId(null);
+      await loadRows();
     } catch (error) {
       setRequestError(error.message || "Failed to save issue type.");
     } finally {
@@ -262,6 +382,7 @@ export function IssueTypes({ t, accent }) {
     if (!row.persistedId) {
       setRows((current) => removeIssueTypeRow(current, row.id));
       if (editingRowId === row.id) setEditingRowId(null);
+      if (managingLinksRowId === row.id) setManagingLinksRowId(null);
       return;
     }
 
@@ -274,6 +395,7 @@ export function IssueTypes({ t, accent }) {
 
       setRows((current) => removeIssueTypeRow(current, row.id));
       if (editingRowId === row.id) setEditingRowId(null);
+      if (managingLinksRowId === row.id) setManagingLinksRowId(null);
     } catch (error) {
       setRequestError(error.message || "Failed to delete issue type.");
     }
@@ -283,6 +405,58 @@ export function IssueTypes({ t, accent }) {
     const draft = createIssueTypeDraft();
     setRows((current) => [draft, ...current]);
     setEditingRowId(draft.id);
+  }
+
+  async function updateSopIssueType(sopId, issueTypeId) {
+    await apiJson(`/api/sops/${sopId}?client_id=${encodeURIComponent(clientId)}`, {
+      method: "PUT",
+      body: { client_id: clientId, issue_type_id: issueTypeId || null },
+    });
+  }
+
+  async function handleLinkSop() {
+    if (!managingLinksRow?.persistedId || !selectedLinkSopId) return;
+    setLinkLoading(true);
+    setLinkError("");
+    try {
+      await updateSopIssueType(selectedLinkSopId, managingLinksRow.persistedId);
+      setSelectedLinkSopId("");
+      await loadRows();
+    } catch (error) {
+      setLinkError(error.message || "Failed to link SOP.");
+    } finally {
+      setLinkLoading(false);
+    }
+  }
+
+  async function handleUnlinkSop(sop) {
+    if (!sop?.persistedId) return;
+    setLinkLoading(true);
+    setLinkError("");
+    try {
+      await updateSopIssueType(sop.persistedId, null);
+      await loadRows();
+    } catch (error) {
+      setLinkError(error.message || "Failed to remove SOP link.");
+    } finally {
+      setLinkLoading(false);
+    }
+  }
+
+  async function handleDeleteLinkedSop(sop) {
+    if (!sop?.persistedId) return;
+    const confirmed = window.confirm(`Delete "${sop.title || "this SOP"}" permanently?`);
+    if (!confirmed) return;
+    setLinkLoading(true);
+    setLinkError("");
+    try {
+      await apiJson(`/api/sops/${sop.persistedId}?client_id=${encodeURIComponent(clientId)}`, { method: "DELETE" });
+      await loadRows();
+    } catch (error) {
+      setLinkError(error.message || "Failed to delete SOP.");
+    } finally {
+      setLinkLoading(false);
+    }
   }
 
   return (
@@ -378,17 +552,24 @@ export function IssueTypes({ t, accent }) {
                           {row.name.trim() || "New Issue Type"}
                         </span>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-                          <span style={{
-                            fontSize: "10px",
-                            fontWeight: "700",
-                            color: accent,
-                            background: `${accent}14`,
-                            border: `1px solid ${accent}26`,
-                            borderRadius: "999px",
-                            padding: "3px 8px",
-                          }}>
-                            {linkedCount} SOP{linkedCount === 1 ? "" : "s"}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => { if (row.persistedId) { setManagingLinksRowId(row.id); setSelectedLinkSopId(""); setLinkError(""); } }}
+                            disabled={!row.persistedId}
+                            style={{ background: "none", border: "none", padding: 0, cursor: row.persistedId ? "pointer" : "default", opacity: row.persistedId ? 1 : 0.55 }}
+                          >
+                            <span style={{
+                              fontSize: "10px",
+                              fontWeight: "700",
+                              color: accent,
+                              background: `${accent}14`,
+                              border: `1px solid ${accent}26`,
+                              borderRadius: "999px",
+                              padding: "3px 8px",
+                            }}>
+                              {linkedCount} SOP{linkedCount === 1 ? "" : "s"}
+                            </span>
+                          </button>
                           {row.isDirty && (
                             <span style={{
                               fontSize: "10px",
@@ -413,6 +594,14 @@ export function IssueTypes({ t, accent }) {
                           : "No escalation rules yet"}
                       </div>
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => { if (row.persistedId) { setManagingLinksRowId(row.id); setSelectedLinkSopId(""); setLinkError(""); } }}
+                          disabled={!row.persistedId}
+                          style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: "8px", color: t.textSub, fontSize: "12px", fontWeight: "600", padding: "7px 12px", cursor: row.persistedId ? "pointer" : "default", opacity: row.persistedId ? 1 : 0.55 }}
+                        >
+                          Manage SOPs
+                        </button>
                         <button
                           type="button"
                           onClick={() => setTestingRow(row)}
@@ -454,7 +643,26 @@ export function IssueTypes({ t, accent }) {
           onChange={(field, value) => handleChange(editingRow.id, field, value)}
           onDelete={() => handleDelete(editingRow)}
           onSave={() => handleSave(editingRow)}
+          onManageLinks={() => { if (editingRow.persistedId) { setManagingLinksRowId(editingRow.id); setSelectedLinkSopId(""); setLinkError(""); } }}
           onClose={() => setEditingRowId(null)}
+        />
+      )}
+
+      {managingLinksRow?.persistedId && (
+        <LinkedSopsModal
+          issueType={managingLinksRow}
+          linkedSops={linkedSopsForRow}
+          availableSops={availableSopsForLink}
+          selectedSopId={selectedLinkSopId}
+          linkLoading={linkLoading}
+          error={linkError}
+          t={t}
+          accent={accent}
+          onSelectSop={setSelectedLinkSopId}
+          onLink={handleLinkSop}
+          onUnlink={handleUnlinkSop}
+          onDeleteSop={handleDeleteLinkedSop}
+          onClose={() => { setManagingLinksRowId(null); setSelectedLinkSopId(""); setLinkError(""); }}
         />
       )}
 
