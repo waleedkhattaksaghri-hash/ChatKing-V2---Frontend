@@ -2,6 +2,27 @@ const rawApiUrl = import.meta.env.VITE_API_URL?.trim();
 const rawClientId = import.meta.env.VITE_CLIENT_ID?.trim();
 const ACTIVE_CLIENT_STORAGE_KEY = "chatking_active_client_id";
 
+function isLocalLoopbackHost(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function resolveApiUrl() {
+  if (!rawApiUrl) return "";
+
+  try {
+    const parsed = new URL(rawApiUrl);
+    if (typeof window !== "undefined") {
+      const currentHost = window.location.hostname;
+      if (isLocalLoopbackHost(parsed.hostname) && isLocalLoopbackHost(currentHost) && parsed.hostname !== currentHost) {
+        parsed.hostname = currentHost;
+      }
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return rawApiUrl.replace(/\/$/, "");
+  }
+}
+
 function normalizeClientId(value) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -15,7 +36,7 @@ function readStoredClientId() {
   }
 }
 
-export const API_URL = rawApiUrl ? rawApiUrl.replace(/\/$/, "") : "";
+export const API_URL = resolveApiUrl();
 export let CLIENT_ID = readStoredClientId() || normalizeClientId(rawClientId);
 
 export function getActiveClientId() {
