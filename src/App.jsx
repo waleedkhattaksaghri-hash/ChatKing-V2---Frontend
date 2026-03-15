@@ -3,6 +3,7 @@ import { apiFetch, apiJson, getActiveClientId, getAdminSessionStatus, getConfigW
 import { runBackgroundJobFlow } from "./lib/backgroundJobs";
 import { AIInsightsPanel } from "./components/AIInsightsPanel";
 import { KnowledgeBase } from "./components/KnowledgeBase";
+import { ClientMemory } from "./components/ClientMemory";
 import { Tools } from "./components/Tools";
 import { AITestPanel } from "./components/AITestPanel";
 import { Insights } from "./components/Insights";
@@ -1607,6 +1608,7 @@ export default function ChatKing() {
         { id: "issue-types", label: "Issue Types",    icon: "IT" },
         { id: "sops",        label: "SOPs",           icon: "SO" },
         { id: "knowledge",   label: "Knowledge Base", icon: "KB" },
+        { id: "client-memory", label: "Client Memory", icon: "MB" },
         { id: "ai-test",     label: "AI Test",        icon: "TS" },
         { id: "tools",       label: "Tools",          icon: "TL" },
         { id: "admin-stats", label: "Admin Stats",    icon: "ST" },
@@ -1642,6 +1644,7 @@ export default function ChatKing() {
     if (nav === "issue-types") return <IssueTypes t={t} accent={accent} />;
     if (nav === "sops")        return <SOPs t={t} accent={accent} />;
     if (nav === "knowledge")   return <KnowledgeBase t={t} accent={accent} />;
+    if (nav === "client-memory") return <ClientMemory t={t} accent={accent} />;
     if (nav === "ai-test")     return <AITestPanel t={t} accent={accent} />;
     if (nav === "tools")       return <Tools t={t} accent={accent} />;
     if (nav === "admin-stats") return <AdminStats t={t} accent={accent} />;
@@ -1672,6 +1675,7 @@ export default function ChatKing() {
     "issue-types": "Issue Types",
     "sops": "SOPs",
     "knowledge": "Knowledge Base",
+    "client-memory": "Client Memory",
     "ai-test": "AI Test",
     "tools": "Tools",
     "admin-stats": "Admin Stats",
