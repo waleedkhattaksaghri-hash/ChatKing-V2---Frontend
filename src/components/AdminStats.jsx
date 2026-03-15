@@ -87,7 +87,7 @@ export function AdminStats({ t, accent }) {
     <div>
       <SectionHeader
         title="Admin Stats"
-        sub="Operational health for the current workspace. Use this to verify AI usage, queue health, request volume, and failure signals before you scale further."
+        sub="Operational health for the current workspace plus process-local backend telemetry. Queue counts are workspace-specific; request and AI counters reflect the current backend process, not a global tenant-wide total."
         t={t}
         action={(
           <button
@@ -128,14 +128,14 @@ export function AdminStats({ t, accent }) {
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "12px", marginBottom: "18px" }}>
-        <StatCard title="Requests" value={requestMetrics.total || 0} sub="Total requests seen since the current backend process started." color={accent} t={t} />
-        <StatCard title="AI Responses" value={aiMetrics.total || 0} sub="Customer replies processed through the response pipeline." color="#10B981" t={t} />
+        <StatCard title="Requests" value={requestMetrics.total || 0} sub="Process-local request count since this backend instance started." color={accent} t={t} />
+        <StatCard title="AI Responses" value={aiMetrics.total || 0} sub="Process-local AI reply count across this backend instance." color="#10B981" t={t} />
         <StatCard title="Queue Backlog" value={(queue.pending || 0) + (queue.retry || 0) + (queue.processing || 0)} sub="Pending, retry, and processing jobs for this workspace." color="#F59E0B" t={t} />
         <StatCard title="Failures" value={(requestMetrics.byStatusClass?.["5xx"] || 0) + (jobMetrics.failed || 0)} sub="Server errors plus failed background jobs." color="#FB7185" t={t} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "14px", marginBottom: "18px" }}>
-        <KeyValueList title="AI Generation Mode" items={Object.entries(aiMetrics.byGenerationMode || {})} t={t} accent={accent} empty="No AI replies recorded yet." />
+        <KeyValueList title="AI Generation Mode (Process)" items={Object.entries(aiMetrics.byGenerationMode || {})} t={t} accent={accent} empty="No AI replies recorded yet." />
         <KeyValueList title="Queue Counts" items={Object.entries({
           pending: queue.pending || 0,
           retry: queue.retry || 0,
@@ -143,7 +143,7 @@ export function AdminStats({ t, accent }) {
           failed: queue.failed || 0,
           completed: queue.completed || 0,
         })} t={t} accent="#F59E0B" />
-        <KeyValueList title="Request Status Classes" items={Object.entries(requestMetrics.byStatusClass || {})} t={t} accent="#FB7185" />
+        <KeyValueList title="Request Status Classes (Process)" items={Object.entries(requestMetrics.byStatusClass || {})} t={t} accent="#FB7185" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "18px" }}>
@@ -154,7 +154,7 @@ export function AdminStats({ t, accent }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <StatCard title="Avg Job Lag" value={jobMetrics.avgLagMs || 0} sub="Time from enqueue to worker pickup." color={accent} t={t} />
-            <StatCard title="Avg Job Duration" value={jobMetrics.avgDurationMs || 0} sub="Average worker execution time." color={accent} t={t} />
+            <StatCard title="Avg Job Duration" value={jobMetrics.avgDurationMs || 0} sub="Average Average worker execution time on this backend deployment." color={accent} t={t} />
           </div>
         </Card>
         <Card t={t} style={{ padding: "18px 20px" }}>
@@ -174,7 +174,9 @@ export function AdminStats({ t, accent }) {
         </Card>
       </div>
 
-      <KeyValueList title="Busiest Routes" items={requestRouteRows} t={t} accent={accent} empty="No request traffic recorded yet." />
+      <KeyValueList title="Busiest Routes (Process)" items={requestRouteRows} t={t} accent={accent} empty="No request traffic recorded yet." />
     </div>
   );
 }
+
+

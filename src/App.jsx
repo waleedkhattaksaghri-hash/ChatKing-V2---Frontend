@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { apiFetch, apiJson, getActiveClientId, getConfigWarning, setActiveClientId } from "./lib/api";
+import { apiFetch, apiJson, getActiveClientId, getAdminSessionStatus, getConfigWarning, loginAdminSession, logoutAdminSession, requestAdminLoginCode, setActiveClientId, verifyAdminLoginCode } from "./lib/api";
 import { runBackgroundJobFlow } from "./lib/backgroundJobs";
 import { AIInsightsPanel } from "./components/AIInsightsPanel";
 import { KnowledgeBase } from "./components/KnowledgeBase";
@@ -17,6 +17,7 @@ import { Channels } from "./components/Channels";
 import { Team } from "./components/Team";
 import { Companies } from "./components/Companies";
 import { AdminStats } from "./components/AdminStats";
+import { AdminLoginScreen } from "./components/AdminLoginScreen";
 import { RichTextEditor } from "./components/RichTextEditor";
 import { Card, JobStatusNotice, Pill, SectionHeader, Tag, Toggle } from "./components/ui";
 import { useApi } from "./lib/useApi";
@@ -388,17 +389,17 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
 
   function applySettingsSnapshot(s) {
     const nextSnapshot = {
-      botName: s.bot_name || botName,
-      greeting: s.greeting || greeting,
-      fallback: s.fallback || fallback,
+      botName: s.bot_name ?? botName,
+      greeting: s.greeting ?? greeting,
+      fallback: s.fallback ?? fallback,
       confidenceThreshold: String(s.confidence_threshold ?? confidenceThreshold),
-      contextText: s.context_text || contextText,
-      escalationsText: s.escalations_text || escalationsText,
-      toneChat: s.tone_chat || toneChat,
-      toneEmail: s.tone_email || toneEmail,
-      toneWA: s.tone_whatsapp || toneWA,
-      allowedText: s.capabilities_allowed || allowedText,
-      blockedText: s.capabilities_blocked || blockedText,
+      contextText: s.context_text ?? contextText,
+      escalationsText: s.escalations_text ?? escalationsText,
+      toneChat: s.tone_chat ?? toneChat,
+      toneEmail: s.tone_email ?? toneEmail,
+      toneWA: s.tone_whatsapp ?? toneWA,
+      allowedText: s.capabilities_allowed ?? allowedText,
+      blockedText: s.capabilities_blocked ?? blockedText,
     };
 
     setBotName(nextSnapshot.botName);
@@ -1463,11 +1464,22 @@ export default function ChatKing() {
   const [clients,        setClients]        = useState([]);
   const [activeClient,   setActiveClient]   = useState(null);
   const [showClientMenu, setShowClientMenu] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authSession, setAuthSession] = useState(null);
 
   const [evaluatedIds, setEvaluatedIds] = useState(new Set());
   const themeRef = useRef(null);
   const configWarning = import.meta.env.DEV ? getConfigWarning() : "";
-  // Load clients from API
+
+  async function loadSession() {
+    const session = await getAdminSessionStatus();
+    setAuthenticated(!!session?.authenticated);
+    setAuthSession(session?.authenticated ? session : null);
+    setAuthChecked(true);
+    return session;
+  }
+
   async function loadClients() {
     const data = await apiFetch("/api/settings/clients");
     if (data && data.length) {
@@ -1479,14 +1491,62 @@ export default function ChatKing() {
       return;
     }
 
-    const fallbackClientId = getActiveClientId();
-    if (fallbackClientId) {
-      setActiveClient({ id: fallbackClientId, name: "Default Workspace", plan: "starter" });
+    setClients([]);
+    setActiveClient(null);
+  }
+
+  async function handleRequestLoginCode(email) {
+    return requestAdminLoginCode(email);
+  }
+
+  async function handleVerifyLoginCode(email, code) {
+    const session = await verifyAdminLoginCode(email, code);
+    setAuthenticated(!!session?.authenticated);
+    setAuthSession(session?.authenticated ? session : null);
+    if (session?.authenticated) {
+      await loadClients();
     }
+    return session;
+  }
+
+  async function handleLegacyTokenLogin(token) {
+    const session = await loginAdminSession(token);
+    setAuthenticated(!!session?.authenticated);
+    setAuthSession(session?.authenticated ? session : null);
+    if (session?.authenticated) {
+      await loadClients();
+    }
+    return session;
+  }
+
+  async function handleLogout() {
+    await logoutAdminSession();
+    setAuthenticated(false);
+    setAuthSession(null);
+    setClients([]);
+    setActiveClient(null);
   }
 
   useEffect(() => {
+    loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (!authChecked || !authenticated) return;
     loadClients();
+  }, [authChecked, authenticated]);
+
+  useEffect(() => {
+    function handleUnauthorized() {
+      setAuthenticated(false);
+      setAuthSession(null);
+      setClients([]);
+      setActiveClient(null);
+      setAuthChecked(true);
+    }
+
+    window.addEventListener("chatking:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("chatking:unauthorized", handleUnauthorized);
   }, []);
 
   useEffect(() => {
@@ -1497,6 +1557,19 @@ export default function ChatKing() {
   const acc    = ACCENT_PRESETS[accentIdx];
   const accent = acc.color;
   const font   = FONT_OPTIONS[fontIdx].name;
+
+  if (!authChecked || !authenticated) {
+    return (
+      <AdminLoginScreen
+        t={t}
+        accent={accent}
+        status={{ checking: !authChecked }}
+        onRequestCode={handleRequestLoginCode}
+        onVerifyCode={handleVerifyLoginCode}
+        onLegacyLogin={handleLegacyTokenLogin}
+      />
+    );
+  }
 
   useEffect(() => {
     const h = e => { if (themeRef.current && !themeRef.current.contains(e.target)) setShowTheme(false); };
@@ -1851,6 +1924,17 @@ export default function ChatKing() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1,6 +1,5 @@
 const rawApiUrl = import.meta.env.VITE_API_URL?.trim();
 const rawClientId = import.meta.env.VITE_CLIENT_ID?.trim();
-const rawAdminApiToken = import.meta.env.VITE_ADMIN_API_TOKEN?.trim();
 const ACTIVE_CLIENT_STORAGE_KEY = "chatking_active_client_id";
 
 function normalizeClientId(value) {
@@ -18,7 +17,6 @@ function readStoredClientId() {
 
 export const API_URL = rawApiUrl ? rawApiUrl.replace(/\/$/, "") : "";
 export let CLIENT_ID = readStoredClientId() || normalizeClientId(rawClientId);
-export const ADMIN_API_TOKEN = rawAdminApiToken || "";
 
 export function getActiveClientId() {
   return CLIENT_ID;
@@ -40,37 +38,9 @@ export function setActiveClientId(nextClientId) {
   return CLIENT_ID;
 }
 
-const missingEnvVars = [
-  !API_URL ? "VITE_API_URL" : null,
-  !CLIENT_ID ? "VITE_CLIENT_ID" : null,
-].filter(Boolean);
+const missingEnvVars = [!API_URL ? "VITE_API_URL" : null].filter(Boolean);
 
 export const hasRequiredConfig = missingEnvVars.length === 0;
-
-if (typeof window !== "undefined" && ADMIN_API_TOKEN && !window.__chatKingPatchedFetch) {
-  const originalFetch = window.fetch.bind(window);
-
-  window.fetch = (input, init = {}) => {
-    const requestUrl = typeof input === "string" ? input : input?.url || "";
-    const isApiRequest = requestUrl.startsWith(`${API_URL}/`) || requestUrl.startsWith("/api/");
-
-    if (!isApiRequest) {
-      return originalFetch(input, init);
-    }
-
-    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-    if (!headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${ADMIN_API_TOKEN}`);
-    }
-
-    return originalFetch(input, {
-      ...init,
-      headers,
-    });
-  };
-
-  window.__chatKingPatchedFetch = true;
-}
 
 export function getConfigWarning() {
   if (hasRequiredConfig) return "";
@@ -81,6 +51,61 @@ if (import.meta.env.DEV && !hasRequiredConfig) {
   console.error(`${getConfigWarning()} Create a .env file from .env.example before running ChatKing.`);
 }
 
+async function parseApiResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  return contentType.includes("application/json")
+    ? await response.json().catch(() => null)
+    : await response.text().catch(() => "");
+}
+
+function dispatchUnauthorized() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("chatking:unauthorized"));
+  }
+}
+
+export async function getAdminSessionStatus() {
+  if (!API_URL) return { authenticated: false };
+  try {
+    const response = await fetch(`${API_URL}/api/admin/session`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      return { authenticated: false };
+    }
+    return (await parseApiResponse(response)) || { authenticated: false };
+  } catch {
+    return { authenticated: false };
+  }
+}
+
+export async function requestAdminLoginCode(email) {
+  return apiJson("/api/admin/session/request-code", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export async function verifyAdminLoginCode(email, code) {
+  return apiJson("/api/admin/session/verify-code", {
+    method: "POST",
+    body: { email, code },
+  });
+}
+
+export async function loginAdminSession(token) {
+  return apiJson("/api/admin/session", {
+    method: "POST",
+    body: { token },
+  });
+}
+
+export async function logoutAdminSession() {
+  return apiJson("/api/admin/session", {
+    method: "DELETE",
+  });
+}
+
 export async function apiFetch(path, options = {}) {
   if (!API_URL) {
     console.error("Missing VITE_API_URL. API requests are disabled until the frontend environment is configured.");
@@ -89,27 +114,21 @@ export async function apiFetch(path, options = {}) {
 
   try {
     const url = path.startsWith("http") ? path : `${API_URL}${path}`;
-    const finalHeaders = new Headers(options.headers || {});
-    if (ADMIN_API_TOKEN && !finalHeaders.has("Authorization")) {
-      finalHeaders.set("Authorization", `Bearer ${ADMIN_API_TOKEN}`);
-    }
-
     const response = await fetch(url, {
+      credentials: "include",
       ...options,
-      headers: finalHeaders,
     });
+
+    if (response.status === 401) {
+      dispatchUnauthorized();
+    }
 
     if (!response.ok) {
       const message = await response.text().catch(() => "");
       throw new Error(message || `HTTP ${response.status}`);
     }
 
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      return response.json();
-    }
-
-    return response.text();
+    return parseApiResponse(response);
   } catch (error) {
     console.error("API error:", path, error);
     return null;
@@ -121,20 +140,11 @@ export async function apiJson(path, options = {}) {
     throw new Error("Missing VITE_API_URL. API requests are disabled until the frontend environment is configured.");
   }
 
-  const {
-    body,
-    headers,
-    method = "GET",
-    ...rest
-  } = options;
+  const { body, headers, method = "GET", ...rest } = options;
 
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
   const finalHeaders = new Headers(headers || {});
   let finalBody = body;
-
-  if (ADMIN_API_TOKEN && !finalHeaders.has("Authorization")) {
-    finalHeaders.set("Authorization", `Bearer ${ADMIN_API_TOKEN}`);
-  }
 
   if (body !== undefined && !(body instanceof FormData) && !finalHeaders.has("Content-Type")) {
     finalHeaders.set("Content-Type", "application/json");
@@ -153,13 +163,15 @@ export async function apiJson(path, options = {}) {
       method,
       headers: finalHeaders,
       body: finalBody,
+      credentials: "include",
       ...rest,
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    const payload = contentType.includes("application/json")
-      ? await response.json().catch(() => null)
-      : await response.text().catch(() => "");
+    const payload = await parseApiResponse(response);
+
+    if (response.status === 401) {
+      dispatchUnauthorized();
+    }
 
     if (!response.ok) {
       if (payload && typeof payload === "object") {
@@ -176,3 +188,4 @@ export async function apiJson(path, options = {}) {
     throw error;
   }
 }
+
