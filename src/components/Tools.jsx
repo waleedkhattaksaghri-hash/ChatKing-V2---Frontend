@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, apiJson, getActiveClientId } from "../lib/api";
 import { runBackgroundJobFlow } from "../lib/backgroundJobs";
 import { Card, JobStatusNotice, SectionHeader } from "./ui";
@@ -29,6 +29,44 @@ const VERIFICATION_OPTIONS = [
   { value: "manual", label: "Manual / async confirmation" },
   { value: "none", label: "No verification check" },
 ];
+
+function getSuggestedGovernanceForType(toolType = "") {
+  switch (toolType) {
+    case "n8n_workflow":
+      return {
+        tool_category: "side_effect",
+        side_effect_risk_level: "high",
+        requires_confirmation: true,
+        confirmation_mode: "human_review",
+        verification_mode: "manual",
+      };
+    case "webhook":
+      return {
+        tool_category: "write",
+        side_effect_risk_level: "medium",
+        requires_confirmation: false,
+        confirmation_mode: "none",
+        verification_mode: "http_success",
+      };
+    case "internal_action":
+      return {
+        tool_category: "side_effect",
+        side_effect_risk_level: "high",
+        requires_confirmation: true,
+        confirmation_mode: "human_review",
+        verification_mode: "manual",
+      };
+    case "api":
+    default:
+      return {
+        tool_category: "read",
+        side_effect_risk_level: "low",
+        requires_confirmation: false,
+        confirmation_mode: "none",
+        verification_mode: "http_success",
+      };
+  }
+}
 
 function getToolGovernance(tool = {}) {
   return tool.tool_governance || tool.response_schema?._tool_governance || {};
@@ -109,17 +147,18 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
   const isEdit = !!tool?.id;
   const [form, setForm] = useState(() => {
   const governance = getToolGovernance(tool || {});
+  const suggested = getSuggestedGovernanceForType(tool?.tool_type || "api");
   const baseTool = {
     name: "", slug: "", description: "", tool_type: "api",
     endpoint: "", method: "GET", auth_type: "none",
     auth_token: "", auth_key_name: "", auth_key_value: "",
     auth_username: "", auth_password: "",
     headers: "{}", parameters: [], response_schema: "{}", status: "draft",
-    tool_category: governance.tool_category || "read",
-    side_effect_risk_level: governance.side_effect_risk_level || "low",
-    requires_confirmation: !!governance.requires_confirmation,
-    confirmation_mode: governance.confirmation_mode || "none",
-    verification_mode: governance.verification_mode || "http_success",
+    tool_category: governance.tool_category || suggested.tool_category,
+    side_effect_risk_level: governance.side_effect_risk_level || suggested.side_effect_risk_level,
+    requires_confirmation: governance.requires_confirmation !== undefined ? !!governance.requires_confirmation : suggested.requires_confirmation,
+    confirmation_mode: governance.confirmation_mode || suggested.confirmation_mode,
+    verification_mode: governance.verification_mode || suggested.verification_mode,
     success_json_path: governance.success_json_path || "",
     success_value: governance.success_value === undefined ? "true" : JSON.stringify(governance.success_value),
     ...(tool || {}),
@@ -134,6 +173,7 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
 });
   const [saving, setSaving] = useState(false);
   const [jsonErrors, setJsonErrors] = useState({});
+  const governanceTouchedRef = useRef(false);
 
   function set(k, v) {
     setForm(f => {
@@ -142,9 +182,23 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
       if (k === "name" && !isEdit) {
         next.slug = v.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
       }
+      if (["tool_category", "side_effect_risk_level", "requires_confirmation", "confirmation_mode", "verification_mode", "success_json_path", "success_value"].includes(k)) {
+        governanceTouchedRef.current = true;
+      }
+      if (k === "tool_type" && !governanceTouchedRef.current) {
+        const suggested = getSuggestedGovernanceForType(v);
+        next.tool_category = suggested.tool_category;
+        next.side_effect_risk_level = suggested.side_effect_risk_level;
+        next.requires_confirmation = suggested.requires_confirmation;
+        next.confirmation_mode = suggested.confirmation_mode;
+        next.verification_mode = suggested.verification_mode;
+      }
       return next;
     });
   }
+
+  const governanceRisky = form.tool_category === "side_effect" || form.side_effect_risk_level === "high";
+  const suggestedGovernance = getSuggestedGovernanceForType(form.tool_type);
 
   async function save() {
     // Validate JSON fields
@@ -333,6 +387,20 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
             <div style={{ fontSize: "11px", fontWeight: "700", color: t.textMuted,
               textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "12px" }}>
               Tool Governance
+            </div>
+            <div style={{
+              fontSize: "11px",
+              color: governanceRisky ? "#F59E0B" : t.textSub,
+              marginBottom: "12px",
+              lineHeight: "1.5",
+              padding: "10px 12px",
+              borderRadius: "8px",
+              background: governanceRisky ? "rgba(245,158,11,0.10)" : t.surface,
+              border: `1px solid ${governanceRisky ? "rgba(245,158,11,0.35)" : t.border}`,
+            }}>
+              <strong style={{ color: governanceRisky ? "#F59E0B" : t.text }}>Suggested for {TOOL_TYPE_META[form.tool_type]?.label || form.tool_type}:</strong>{" "}
+              {suggestedGovernance.tool_category} · {suggestedGovernance.side_effect_risk_level} risk · {suggestedGovernance.verification_mode.replace(/_/g, " ")}
+              {governanceRisky ? " This configuration can trigger higher-risk actions, so confirmation and verification should stay strict." : " This is a lower-risk lookup-oriented configuration."}
             </div>
             <div style={row2}>
               <div>{fieldLabel("Tool Category")}{sel("tool_category", TOOL_CATEGORY_OPTIONS)}</div>
