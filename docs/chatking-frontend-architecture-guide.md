@@ -362,6 +362,8 @@ Current behavior:
 - shows an interim assistant-thinking state while waiting for the backend
 - renders session history
 - surfaces diagnostics from the backend
+- remains on the preview/test path rather than the live webhook ingress path
+- is now protected by non-live concurrency caps on the backend, so saturation is throttled instead of degrading live traffic
 
 Current diagnostic visibility includes:
 - source selection
@@ -470,6 +472,7 @@ The existing Insights page now carries more of the analytics surface.
 Current sections include:
 - operational insight cards
 - retrieval-quality analytics
+- reliability analytics
 - AI cost accounting
 - issue outcome mix
 - ranked metric lists for SOP/KB/source performance
@@ -484,13 +487,34 @@ Recent additions surfaced on the existing page include:
 - policy override rate
 - memory reinforced rate
 - fallback retrieval rate
+- queue depth by job type
+- retry counts and dead-letter/failure indicators
+- oldest pending job age
+- worker throughput and worker claim latency
+- webhook p95 / p99 latency
+- end-to-end reply latency
+- fallback generation rate
+- tool timeout rate
+- summary backlog
+- stage failure rate
+- workload backlog by category
 - AI cost by stage
 - AI cost by channel
 - AI cost by issue type
 - AI cost by decision mode
 - AI cost trend
 
-No separate analytics page was created for these.
+The page still does not create separate analytics destinations for these topics.
+Instead, the current Insights page acts as the main operator analytics surface for:
+- retrieval quality
+- reliability / burst-traffic safety
+- AI cost accounting
+- issue outcome mix
+
+This keeps the frontend aligned with the backend design:
+- `/api/analytics` returns the aggregated KPI-style data
+- `/api/insights` supports insight/review style data
+- the frontend composes both into one operator-facing page
 
 ### AI Insights Panel
 
