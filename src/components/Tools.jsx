@@ -12,6 +12,35 @@ const TOOL_TYPE_META = {
 const METHOD_OPTIONS  = ["GET","POST","PUT","PATCH","DELETE"];
 const AUTH_OPTIONS    = ["none","bearer","api_key","basic"];
 const PARAM_TYPES     = ["string","number","boolean","array","object"];
+const TOOL_CATEGORY_OPTIONS = [
+  { value: "read", label: "Read-only" },
+  { value: "write", label: "Write / Action" },
+  { value: "side_effect", label: "Side-effect / Workflow" },
+];
+const RISK_LEVEL_OPTIONS = ["low", "medium", "high"];
+const CONFIRMATION_OPTIONS = [
+  { value: "none", label: "No confirmation" },
+  { value: "user_confirmation", label: "User confirmation required" },
+  { value: "human_review", label: "Human review required" },
+];
+const VERIFICATION_OPTIONS = [
+  { value: "http_success", label: "HTTP success" },
+  { value: "response_flag", label: "Response flag" },
+  { value: "manual", label: "Manual / async confirmation" },
+  { value: "none", label: "No verification check" },
+];
+
+function getToolGovernance(tool = {}) {
+  return tool.tool_governance || tool.response_schema?._tool_governance || {};
+}
+
+function toolGovernanceSummary(tool = {}) {
+  const governance = getToolGovernance(tool);
+  const category = governance.tool_category || "read";
+  const risk = governance.side_effect_risk_level || "low";
+  const confirmation = governance.confirmation_mode || "none";
+  return `${category} · ${risk} risk${confirmation !== "none" ? ` · ${confirmation.replace(/_/g, " ")}` : ""}`;
+}
 
 // ── Parameters Builder ────────────────────────────────────────────────────────
 function ParametersBuilder({ params, onChange, t, accent }) {
@@ -79,12 +108,20 @@ function ParametersBuilder({ params, onChange, t, accent }) {
 function ToolFormModal({ tool, t, accent, onSave, onClose }) {
   const isEdit = !!tool?.id;
   const [form, setForm] = useState(() => {
+  const governance = getToolGovernance(tool || {});
   const baseTool = {
     name: "", slug: "", description: "", tool_type: "api",
     endpoint: "", method: "GET", auth_type: "none",
     auth_token: "", auth_key_name: "", auth_key_value: "",
     auth_username: "", auth_password: "",
     headers: "{}", parameters: [], response_schema: "{}", status: "draft",
+    tool_category: governance.tool_category || "read",
+    side_effect_risk_level: governance.side_effect_risk_level || "low",
+    requires_confirmation: !!governance.requires_confirmation,
+    confirmation_mode: governance.confirmation_mode || "none",
+    verification_mode: governance.verification_mode || "http_success",
+    success_json_path: governance.success_json_path || "",
+    success_value: governance.success_value === undefined ? "true" : JSON.stringify(governance.success_value),
     ...(tool || {}),
   };
 
@@ -114,6 +151,8 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
     const errs = {};
     try { JSON.parse(form.headers); }         catch { errs.headers = true; }
     try { JSON.parse(form.response_schema); } catch { errs.response_schema = true; }
+    let parsedSuccessValue = true;
+    try { parsedSuccessValue = JSON.parse(form.success_value || "true"); } catch { errs.success_value = true; }
     if (Object.keys(errs).length) { setJsonErrors(errs); return; }
     setJsonErrors({});
 
@@ -122,6 +161,7 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
       ...form,
       headers:         JSON.parse(form.headers),
       response_schema: JSON.parse(form.response_schema),
+      success_value: parsedSuccessValue,
     });
     setSaving(false);
   }
@@ -154,6 +194,16 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
           background: t.surface, color: jsonErrors[k] ? "#FB7185" : "#A78BFA",
           outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono', monospace",
           resize: "vertical" }} />
+    );
+  }
+  function inlineInput(k, placeholder = "") {
+    return (
+      <input value={form[k] || ""} onChange={e => set(k, e.target.value)}
+        placeholder={placeholder}
+        style={{ width: "100%", fontSize: "12px", padding: "9px 12px", borderRadius: "8px",
+          border: `1px solid ${jsonErrors[k] ? "#FB7185" : t.border}`,
+          background: t.surface, color: jsonErrors[k] ? "#FB7185" : t.text,
+          outline: "none", boxSizing: "border-box", fontFamily: "'DM Mono', monospace" }} />
     );
   }
   function sel(k, options) {
@@ -278,6 +328,48 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
             {jsonErrors.response_schema && <div style={{ fontSize: "11px", color: "#FB7185", marginBottom: "4px" }}>Invalid JSON</div>}
             {jsonField("response_schema", '{"order_id": "string", "status": "string"}')}
           </div>
+
+          <div style={{ padding: "14px", borderRadius: "12px", background: t.surfaceHover, border: `1px solid ${t.border}` }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: t.textMuted,
+              textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "12px" }}>
+              Tool Governance
+            </div>
+            <div style={row2}>
+              <div>{fieldLabel("Tool Category")}{sel("tool_category", TOOL_CATEGORY_OPTIONS)}</div>
+              <div>{fieldLabel("Risk Level")}{sel("side_effect_risk_level", RISK_LEVEL_OPTIONS)}</div>
+            </div>
+            <div style={{ ...row2, marginTop: "14px" }}>
+              <div>{fieldLabel("Confirmation")}{sel("confirmation_mode", CONFIRMATION_OPTIONS)}</div>
+              <div>{fieldLabel("Verification")}{sel("verification_mode", VERIFICATION_OPTIONS)}</div>
+            </div>
+            <div style={{ ...row2, marginTop: "14px" }}>
+              <div>
+                {fieldLabel("Success JSON Path")}
+                {inlineInput("success_json_path", "e.g. data.completed")}
+              </div>
+              <div>
+                {fieldLabel("Success Value (JSON)")}
+                {jsonErrors.success_value && <div style={{ fontSize: "11px", color: "#FB7185", marginBottom: "4px" }}>Invalid JSON literal</div>}
+                {inlineInput("success_value", "true")}
+              </div>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: t.text, marginTop: "14px" }}>
+              <input
+                type="checkbox"
+                checked={!!form.requires_confirmation}
+                onChange={e => {
+                  set("requires_confirmation", e.target.checked);
+                  if (e.target.checked && form.confirmation_mode === "none") set("confirmation_mode", "user_confirmation");
+                  if (!e.target.checked && form.confirmation_mode !== "none") set("confirmation_mode", "none");
+                }}
+                style={{ accentColor: accent }}
+              />
+              Require confirmation before execution
+            </label>
+            <div style={{ fontSize: "11px", color: t.textSub, marginTop: "8px", lineHeight: "1.5" }}>
+              Use this to tell ChatKing whether a tool is a lookup, an action, or a higher-risk workflow, and whether success must be verified before the agent can imply completion.
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
@@ -303,6 +395,8 @@ function ToolTestModal({ tool, t, accent, onClose }) {
   const [paramValues, setParamValues] = useState({});
   const [running, setRunning]         = useState(false);
   const [result, setResult]           = useState(null);
+  const [confirmed, setConfirmed]     = useState(false);
+  const governance = getToolGovernance(tool);
 
   async function runTest() {
     setRunning(true);
@@ -310,7 +404,7 @@ function ToolTestModal({ tool, t, accent, onClose }) {
     try {
       const data = await apiJson(`/api/tools/${tool.id}/test`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: { client_id: clientId, parameters: paramValues },
+        body: { client_id: clientId, parameters: paramValues, confirmed },
       });
       setResult(data);
     } catch (e) {
@@ -344,6 +438,13 @@ function ToolTestModal({ tool, t, accent, onClose }) {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+          <div style={{ fontSize: "11px", color: t.textSub, marginBottom: "14px", lineHeight: "1.5",
+            padding: "10px 12px", borderRadius: "8px", background: t.surfaceHover, border: `1px solid ${t.border}` }}>
+            <strong style={{ color: t.text }}>Governance:</strong> {toolGovernanceSummary(tool)}
+            {governance.verification_mode ? (
+              <div style={{ marginTop: "4px" }}>Verification mode: {governance.verification_mode.replace(/_/g, " ")}</div>
+            ) : null}
+          </div>
           {/* Parameter inputs */}
           {(tool.parameters || []).length > 0 ? (
             <>
@@ -376,6 +477,13 @@ function ToolTestModal({ tool, t, accent, onClose }) {
             </div>
           )}
 
+          {governance.requires_confirmation && (
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: t.text, marginBottom: "16px" }}>
+              <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} style={{ accentColor: accent }} />
+              Confirm this higher-risk action for the test run
+            </label>
+          )}
+
           {/* Result */}
           {result !== null && (
             <div style={{ marginTop: "16px" }}>
@@ -389,6 +497,12 @@ function ToolTestModal({ tool, t, accent, onClose }) {
                   {result.status ? ` · HTTP ${result.status}` : ""}
                   {result.duration_ms ? ` · ${result.duration_ms}ms` : ""}
                 </span>
+              </div>
+              <div style={{ display: "grid", gap: "6px", marginBottom: "10px", fontSize: "11px", color: t.textSub }}>
+                <div><strong style={{ color: t.text }}>Execution:</strong> {result.execution_status || "unknown"}</div>
+                <div><strong style={{ color: t.text }}>Verification:</strong> {result.verification_status || "unknown"}</div>
+                <div><strong style={{ color: t.text }}>Can claim completion:</strong> {result.can_claim_completion ? "Yes" : "No"}</div>
+                {result.blocked_reason ? <div><strong style={{ color: t.text }}>Blocked reason:</strong> {result.blocked_reason}</div> : null}
               </div>
               <pre style={{ background: t.bg || "#070911", border: `1px solid ${t.border}`,
                 borderRadius: "8px", padding: "14px", fontSize: "11px", color: "#A78BFA",
@@ -567,11 +681,11 @@ export function Tools({ t, accent }) {
       {/* ── Tools list ── */}
       {tab === "tools" && (
         <Card t={t} style={{ overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 100px 100px 120px 140px",
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 100px 100px 120px 140px",
             padding: "10px 18px", borderBottom: `1px solid ${t.border}`,
             fontSize: "10px", fontWeight: "700", color: t.textMuted,
             textTransform: "uppercase", letterSpacing: "0.07em" }}>
-            <span>Tool</span><span>Endpoint</span><span>Type</span>
+            <span>Tool</span><span>Governance</span><span>Type</span>
             <span>Status</span><span>Updated</span><span></span>
           </div>
 
@@ -600,7 +714,7 @@ export function Tools({ t, accent }) {
             const updatedAt = tool.updated_at ? new Date(tool.updated_at).toLocaleDateString() : "—";
             return (
               <div key={tool.id}
-                style={{ display: "grid", gridTemplateColumns: "2fr 1fr 100px 100px 120px 140px",
+                style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 100px 100px 120px 140px",
                   alignItems: "center", padding: "13px 18px",
                   borderBottom: i < tools.length - 1 ? `1px solid ${t.borderLight}` : "none",
                   transition: "background 0.1s" }}
@@ -619,11 +733,13 @@ export function Tools({ t, accent }) {
                     </div>
                   )}
                 </div>
-                {/* Endpoint */}
-                <div style={{ fontSize: "11px", color: t.textMuted, fontFamily: "'DM Mono', monospace",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {tool.method && <span style={{ color: accent, marginRight: "4px" }}>{tool.method}</span>}
-                  {tool.endpoint || "—"}
+                {/* Governance */}
+                <div style={{ fontSize: "11px", color: t.textMuted, lineHeight: "1.45" }}>
+                  <div style={{ color: t.textSub }}>{toolGovernanceSummary(tool)}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {tool.method && <span style={{ color: accent, marginRight: "4px" }}>{tool.method}</span>}
+                    {tool.endpoint || "local / internal"}
+                  </div>
                 </div>
                 {/* Type badge */}
                 <span style={{ fontSize: "10px", padding: "3px 9px", borderRadius: "999px",
@@ -664,11 +780,11 @@ export function Tools({ t, accent }) {
       {/* ── Registry ── */}
       {tab === "registry" && (
         <Card t={t} style={{ overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 100px 100px 100px 100px 120px",
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 150px 100px 100px 100px 120px",
             padding: "10px 18px", borderBottom: `1px solid ${t.border}`,
             fontSize: "10px", fontWeight: "700", color: t.textMuted,
             textTransform: "uppercase", letterSpacing: "0.07em" }}>
-            <span>Tool</span><span>Type</span><span>Calls</span>
+            <span>Tool</span><span>Governance</span><span>Calls</span>
             <span>Success %</span><span>Errors</span><span>Last Used</span>
           </div>
 
@@ -690,7 +806,7 @@ export function Tools({ t, accent }) {
               : r.success_rate >= 70 ? "#FBBF24" : "#FB7185";
             return (
               <div key={r.id}
-                style={{ display: "grid", gridTemplateColumns: "2fr 100px 100px 100px 100px 120px",
+                style={{ display: "grid", gridTemplateColumns: "2fr 150px 100px 100px 100px 120px",
                   alignItems: "center", padding: "13px 18px",
                   borderBottom: i < registry.length - 1 ? `1px solid ${t.borderLight}` : "none",
                   transition: "background 0.1s" }}
@@ -700,8 +816,13 @@ export function Tools({ t, accent }) {
                   <div style={{ fontSize: "13px", fontWeight: "600", color: t.text, marginBottom: "2px" }}>{r.name}</div>
                   <div style={{ fontSize: "10px", color: t.textMuted, fontFamily: "'DM Mono', monospace" }}>{r.slug}</div>
                 </div>
-                <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "999px",
-                  background: `${meta.color}18`, color: meta.color, fontWeight: "600" }}>{meta.label}</span>
+                <div style={{ fontSize: "11px", color: t.textSub, lineHeight: "1.45" }}>
+                  <div>
+                    <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "999px",
+                      background: `${meta.color}18`, color: meta.color, fontWeight: "600", display: "inline-block" }}>{meta.label}</span>
+                  </div>
+                  <div style={{ marginTop: "4px" }}>{toolGovernanceSummary(r)}</div>
+                </div>
                 <span style={{ fontSize: "13px", fontWeight: "700", color: t.text,
                   fontFamily: "'DM Mono', monospace" }}>{r.total_calls.toLocaleString()}</span>
                 <span style={{ fontSize: "13px", fontWeight: "700", color: srColor,
