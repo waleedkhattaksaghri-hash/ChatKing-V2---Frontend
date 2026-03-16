@@ -11,6 +11,7 @@ function ArticleEditModal({ article, isPublished, t, accent, onSave, onClose }) 
   const [content, setContent] = useState(article.content || "");
   const [status,  setStatus]  = useState(article.status  || (isPublished ? "published" : "draft"));
   const [saving,  setSaving]  = useState(false);
+  const isDirty = title !== (article.title || "") || content !== (article.content || "") || status !== (article.status || (isPublished ? "published" : "draft"));
 
   async function handleSave() {
     if (!title.trim()) return;
@@ -106,7 +107,7 @@ function ArticleEditModal({ article, isPublished, t, accent, onSave, onClose }) 
             style={{ background: title.trim() ? accent : t.surfaceHover, border: "none",
               borderRadius: "8px", color: title.trim() ? "#fff" : t.textMuted,
               fontSize: "13px", fontWeight: "600", padding: "10px 28px",
-              cursor: title.trim() ? "pointer" : "default", transition: "all 0.15s" }}>
+              cursor: title.trim() ? "pointer" : "default", transition: "all 0.15s", boxShadow: !saving && title.trim() && isDirty ? `0 0 0 1px ${accent}55, 0 0 22px ${accent}55` : "none", transform: !saving && title.trim() && isDirty ? "translateY(-1px)" : "none" }}>
             {saving ? "Saving…" : "Save Article"}
           </button>
         </div>

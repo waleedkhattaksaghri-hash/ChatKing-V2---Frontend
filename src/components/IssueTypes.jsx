@@ -31,6 +31,7 @@ function normalizeLinkedSop(record = {}) {
 }
 
 export function IssueTypeEditorCard({ row, t, accent, errors, saving, linkedSopCount, onChange, onDelete, onSave, onManageLinks }) {
+  const isDirty = !!row.isDirty;
   const inputStyle = {
     width: "100%",
     background: t.surfaceHover,
@@ -153,9 +154,12 @@ export function IssueTypeEditorCard({ row, t, accent, errors, saving, linkedSopC
             fontWeight: "700",
             padding: "10px 18px",
             cursor: saving ? "not-allowed" : "pointer",
+            boxShadow: !saving && isDirty ? `0 0 0 1px ${accent}55, 0 0 22px ${accent}55` : "none",
+            transform: !saving && isDirty ? "translateY(-1px)" : "none",
+            transition: "box-shadow 0.18s ease, transform 0.18s ease",
           }}
         >
-          {saving ? "Saving..." : "Save Issue Type"}
+          {saving ? "Saving..." : isDirty ? "Save Issue Type*" : "Save Issue Type"}
         </button>
       </div>
     </Card>

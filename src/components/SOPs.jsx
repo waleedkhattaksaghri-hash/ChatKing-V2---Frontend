@@ -70,6 +70,7 @@ function buildSopPayload(sop) {
 }
 
 function SopEditorCard({ sop, issueTypes, t, accent, saving, onChange, onSave, onDelete }) {
+  const isDirty = !!sop.isDirty;
   const fieldStyle = {
     width: "100%",
     background: t.surfaceHover,
@@ -166,9 +167,9 @@ function SopEditorCard({ sop, issueTypes, t, accent, saving, onChange, onSave, o
           type="button"
           onClick={onSave}
           disabled={saving}
-          style={{ background: saving ? `${accent}88` : accent, border: "none", borderRadius: "10px", color: "#fff", fontSize: "12px", fontWeight: "700", padding: "10px 18px", cursor: saving ? "not-allowed" : "pointer" }}
+          style={{ background: saving ? `${accent}88` : accent, border: "none", borderRadius: "10px", color: "#fff", fontSize: "12px", fontWeight: "700", padding: "10px 18px", cursor: saving ? "not-allowed" : "pointer", boxShadow: !saving && isDirty ? `0 0 0 1px ${accent}55, 0 0 22px ${accent}55` : "none", transform: !saving && isDirty ? "translateY(-1px)" : "none", transition: "box-shadow 0.18s ease, transform 0.18s ease" }}
         >
-          {saving ? "Saving..." : "Save SOP"}
+          {saving ? "Saving..." : isDirty ? "Save SOP*" : "Save SOP"}
         </button>
       </div>
     </Card>
