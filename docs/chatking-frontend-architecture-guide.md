@@ -2,58 +2,62 @@
 
 ## Purpose
 
-This document explains how the ChatKing frontend dashboard works.
-It focuses on:
-- application shell and navigation
-- auth and session handling
-- workspace selection
-- API communication
-- page modules
-- testing and sandbox tools
-- evaluation and admin surfaces
-- shared UI and local state patterns
-
-This guide describes the current frontend implementation in:
+This guide describes the current frontend dashboard architecture in:
 - `C:\Users\4star\Desktop\ChatKing V2`
 
-## High-Level Model
+It explains:
+- the app shell and navigation model
+- session/auth handling
+- workspace selection
+- how pages communicate with the backend
+- the main build, test, operations, and analytics surfaces
+- how the frontend acts as a control plane for the backend AI system
 
-The ChatKing frontend is a single-page React admin dashboard.
-It is the operator interface for building and running the backend AI support system.
+This document is intended to match the current codebase, not an earlier product shape.
 
-The frontend is responsible for:
-- authenticating the admin session
-- selecting the active workspace (`client_id`)
-- loading and editing support content
-- running tests and previews
-- inspecting live conversations, analytics, and eval runs
-- presenting diagnostics from the backend pipeline
+## Frontend Role
 
-The frontend does not run the AI logic itself.
-It orchestrates and visualizes backend behavior.
+The ChatKing frontend is a React single-page admin dashboard.
 
-## App Shell
+Its job is to:
+- authenticate the operator
+- select the active tenant workspace
+- edit support behavior and content
+- run tests and evals
+- inspect diagnostics, analytics, and conversations
+- surface backend decisions in a readable operator interface
 
-Main app entry:
+It does not make the AI decisions itself.
+
+The frontend is primarily:
+- a control plane
+- an authoring interface
+- a testing surface
+- an operations and analytics surface
+
+The backend remains the execution engine and source of truth.
+
+## Main App Shell
+
+Primary file:
 - [C:\Users\4star\Desktop\ChatKing V2\src\App.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/App.jsx)
 
-The app shell controls:
+The app shell owns:
 - auth gating
-- sidebar navigation
 - active page selection
-- active workspace switching
-- theme, font, and appearance settings
-- top-level page rendering
+- sidebar grouping and navigation
+- active workspace selection
+- appearance settings
+- top-level rendering of page modules
 
-### Navigation model
+The shell is intentionally stateful but still lightweight.
+There is no separate global store like Redux.
 
-Primary nav groups are defined in `App.jsx`:
-- Platform
-- Build
-- Manage
-- Configure
+## Navigation Model
 
-Current major pages include:
+The main dashboard navigation is grouped around operator tasks.
+
+Current major surfaces include:
 - Overview
 - Agent Playbook
 - Issue Types
@@ -72,121 +76,120 @@ Current major pages include:
 - Channels
 - Team
 
-The active page is held in app state and rendered through `renderContent()`.
+The page selection model is simple:
+- the current `view` lives in component state
+- `renderContent()` maps the selected page to the appropriate component
 
-## Auth and Session Flow
+This keeps routing logic inside the single-page shell instead of adopting a larger router architecture.
 
-### Admin login screen
+## Auth and Session Handling
 
-Component:
+Primary login component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\AdminLoginScreen.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/AdminLoginScreen.jsx)
 
-The dashboard supports:
-- email code login
-- legacy platform admin token fallback
-
-The app checks backend session state before rendering the dashboard.
-If the user is not authenticated, the app returns the login screen instead of the dashboard shell.
-
-### Session API layer
-
-Frontend API/auth helper:
+Primary API/auth helper:
 - [C:\Users\4star\Desktop\ChatKing V2\src\lib\api.js](/C:/Users/4star/Desktop/ChatKing%20V2/src/lib/api.js)
 
-Important functions:
+Supported sign-in paths:
+- email code login
+- legacy platform-admin token fallback
+
+Important exported auth helpers:
 - `getAdminSessionStatus()`
 - `requestAdminLoginCode(email)`
 - `verifyAdminLoginCode(email, code)`
 - `loginAdminSession(token)`
 - `logoutAdminSession()`
 
-Behavior:
-- requests use `credentials: "include"`
-- session cookies are the normal auth path
-- `401` responses dispatch a `chatking:unauthorized` event
-- the app listens for that event and resets auth state
+Session behavior:
+- normal requests use `credentials: "include"`
+- `401` triggers the `chatking:unauthorized` event
+- the app shell listens for that event and returns the UI to the login screen
 
-### Localhost alignment
-
-The API helper rewrites local loopback hosts so:
+Local development behavior is also hardened so:
 - `localhost`
 - `127.0.0.1`
 
-stay aligned for cookie behavior in local development.
-
-## API Communication Layer
-
-Main helper:
-- [C:\Users\4star\Desktop\ChatKing V2\src\lib\api.js](/C:/Users/4star/Desktop/ChatKing%20V2/src/lib/api.js)
-
-Main exported pieces:
-- `API_URL`
-- `getActiveClientId()`
-- `setActiveClientId()`
-- `apiFetch()`
-- `apiJson()`
-
-### `apiFetch()`
-
-Used for simpler read flows.
-Behavior:
-- returns parsed JSON/text on success
-- returns `null` on failure
-- logs API errors to console
-- dispatches auth invalidation on `401`
-
-### `apiJson()`
-
-Used for request/response flows where the caller should handle failures.
-Behavior:
-- automatically sets JSON headers/body when needed
-- throws on non-OK responses
-- throws a clearer network error for fetch failures
-- includes credentials for session auth
+stay aligned for cookie behavior where possible.
 
 ## Workspace Selection and Tenant Scope
 
-Workspace selection is frontend-controlled through `client_id`.
+The frontend is workspace-aware, but not the final security layer.
 
-Storage and helpers:
-- `ACTIVE_CLIENT_STORAGE_KEY` in local storage
+Primary helper functions:
 - `getActiveClientId()`
 - `setActiveClientId()`
 
-Behavior:
-- active client is stored in local storage
-- the sidebar client picker updates it
-- page requests use `client_id` from the active workspace
-- the backend still enforces tenant authorization
+Storage:
+- local storage key for the active workspace
 
-The frontend only chooses the active workspace.
-The backend remains the final authority on access.
+Behavior:
+- the operator chooses the active workspace in the dashboard
+- pages use that `client_id` in their requests
+- the backend still enforces access control and tenant authorization
+
+Important architectural rule:
+- the frontend chooses the active workspace
+- the backend decides whether the operator is actually allowed to use it
+
+## API Communication Layer
+
+Primary file:
+- [C:\Users\4star\Desktop\ChatKing V2\src\lib\api.js](/C:/Users/4star/Desktop/ChatKing%20V2/src/lib/api.js)
+
+Primary exports:
+- `API_URL`
+- `apiFetch()`
+- `apiJson()`
+- workspace helpers
+- admin session helpers
+
+### `apiFetch()`
+
+Used for simpler read patterns.
+
+Behavior:
+- parses JSON or text responses
+- returns `null` for failed calls
+- logs errors for easier local debugging
+- dispatches unauthorized events on `401`
+
+### `apiJson()`
+
+Used for request/response flows where failures should be surfaced to the caller.
+
+Behavior:
+- sends JSON headers/body automatically when appropriate
+- throws on non-OK responses
+- throws clearer network errors
+- includes credentials for session auth
+
+The frontend follows a clear split:
+- reads often use `apiFetch()` or `useApi()`
+- writes usually use `apiJson()`
 
 ## Data Loading Pattern
 
-Main hook:
+Primary hook:
 - [C:\Users\4star\Desktop\ChatKing V2\src\lib\useApi.js](/C:/Users/4star/Desktop/ChatKing%20V2/src/lib/useApi.js)
 
-Purpose:
-- lightweight read-side data loading helper
+Common page pattern:
+1. resolve `client_id`
+2. compute the backend path
+3. load with `useApi(...)`
+4. write with `apiJson(...)`
+5. refetch after save/delete/test completion
 
-What it provides:
-- `data`
-- `loading`
-- `error`
-- `refetch()`
+This keeps page components relatively thin and makes them backend-driven.
 
-Typical page behavior:
-- compute an API path from `client_id`
-- call `useApi(path, fallback, deps)`
-- render loading/empty/error states
-- use `apiJson()` for writes
+## Appearance and Local UI Settings
 
-## Theme and Appearance System
+The app shell includes a local appearance system.
 
-The app shell includes a full appearance layer in `App.jsx`.
+Managed in:
+- [C:\Users\4star\Desktop\ChatKing V2\src\App.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/App.jsx)
 
-Managed settings include:
+Capabilities include:
 - dark/light mode
 - accent preset
 - font preset
@@ -195,37 +198,35 @@ Managed settings include:
 Persistence:
 - local storage key `chatking:appearance`
 
-UI pieces:
-- `ThemePanel`
-- sidebar appearance trigger
-- theme-dependent token objects in `THEMES`
+This affects presentation only, not backend behavior.
 
-This is presentation state only.
-It does not affect backend behavior.
+## Shared UI Layer
 
-## Shared UI Components
-
-Shared UI library:
+Shared primitives:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\ui.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/ui.jsx)
 
-Main primitives:
-- `Toggle`
-- `Tag`
-- `JobStatusNotice`
-- `Pill`
+Examples:
 - `Card`
+- `Pill`
+- `Tag`
+- `Toggle`
 - `SectionHeader`
+- `JobStatusNotice`
 
-These are reused across most pages for consistency.
+The UI layer is mostly hand-rolled and theme-aware.
+It supports a consistent operator-dashboard feel across pages.
 
-## Agent Playbook Page
+## Agent Playbook Surface
 
-Main implementation is embedded inside `App.jsx` through `AgentOverview`.
+The Agent Playbook UI is embedded in:
+- [C:\Users\4star\Desktop\ChatKing V2\src\App.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/App.jsx)
 
-What it manages:
+It is one of the most important frontend surfaces because it controls the backend playbook/settings model.
+
+Current responsibilities include editing:
 - bot name
 - greeting
-- fallback wording
+- fallback
 - confidence threshold
 - business context
 - escalation guidance
@@ -235,87 +236,115 @@ What it manages:
 - channel response delays
 
 Important frontend behavior:
-- uses rich text editing for some fields
-- tracks unsaved changes
-- save buttons glow when edits are pending
-- section-level saving is supported
+- rich-text authoring on relevant fields
+- section-level saving
+- save buttons glow when there are unsaved changes
+- drawer/editor mode for focused editing
 
-This page is the main UI for the backend `client_settings` / playbook model.
+This page maps directly to backend `client_settings` behavior.
 
 ## Rich Text Handling
 
-Editor component:
+Primary files:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\RichTextEditor.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/RichTextEditor.jsx)
-
-Utility:
 - [C:\Users\4star\Desktop\ChatKing V2\src\lib\richText.js](/C:/Users/4star/Desktop/ChatKing%20V2/src/lib/richText.js)
 
 Frontend role:
-- capture richer authored content cleanly
-- convert content to plain text where needed for frontend logic
+- support operator-friendly rich-text editing
+- keep authored content manageable
+- convert to cleaner text when needed client-side
 
-The backend is still responsible for final AI-side normalization.
+The backend still performs final normalization for AI use.
 
-## Build Pages
+## Build Surfaces
+
+These pages are where operators shape retrieval and response behavior.
 
 ### Issue Types
 
 Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\IssueTypes.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/IssueTypes.jsx)
 
-Capabilities:
+Current capabilities:
 - list issue types
 - create/edit/delete issue types
-- test issue types through sandbox modal
-- manage linked SOPs from the issue type view
+- run scoped tests
+- compare natural selection vs forced selection
+- view and manage linked SOPs
+- link/unlink SOPs from the issue-type surface
 
-The page also supports:
-- clicking SOP count
-- linking/unlinking SOPs
-- deleting linked SOPs if needed
+This page is mainly about:
+- routing
+- classification guidance
+- escalation framing
+- issue-type authoring
 
 ### SOPs
 
 Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\SOPs.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/SOPs.jsx)
 
-Capabilities:
+Current capabilities:
 - list SOPs
 - create/edit/delete SOPs
-- test SOPs through the shared sandbox modal
-- show save-state glow for unsaved edits
+- test SOP behavior in the shared sandbox
+- show unsaved-change signaling
+
+This is the main operational-instructions authoring surface.
 
 ### Knowledge Base
 
 Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\KnowledgeBase.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/KnowledgeBase.jsx)
 
-Capabilities:
-- CRUD for KB articles
-- test article retrieval through the shared sandbox modal
-- save-state glow for pending edits
+Current capabilities:
+- article CRUD
+- article test/sandbox flow
+- unsaved-change signaling
+
+This is the main factual content authoring surface.
 
 ### Client Memory
 
 Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\ClientMemory.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/ClientMemory.jsx)
 
-Capabilities:
+Current capabilities:
 - create/edit memory entries
-- approve/archive/delete memory entries
-- test memory entries
-- compare natural pipeline behavior versus forced-memory behavior
+- approve memory
+- archive memory
+- delete memory
+- test memory through the sandbox
+- compare natural behavior vs forced-memory behavior
 
-This page is how tenant-specific ?brain? entries are managed.
+This page manages the per-client memory layer that reinforces repeated support patterns.
 
 ### Tools
 
 Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Tools.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Tools.jsx)
 
-Capabilities:
-- configure backend tools
-- manage tool metadata used by the AI pipeline
+This surface has evolved beyond simple endpoints.
+
+Current capabilities include:
+- create/edit/delete tools
+- configure tool type and transport details
+- configure governance metadata
+- configure parameter schemas
+- inspect governance summaries
+- test tools with execution and verification feedback
+
+Governance settings now exposed in the UI include:
+- tool category
+  - `read`
+  - `write`
+  - `side_effect`
+- risk level
+- confirmation requirements
+- verification mode
+- success JSON path / success value
+
+The editor also includes safer suggested defaults by tool type.
 
 ## AI Test and Content Sandboxes
 
@@ -325,19 +354,23 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\AITestPanel.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/AITestPanel.jsx)
 
 Purpose:
-- simulate conversations against the real backend pipeline
-- inspect how the agent behaves over multiple turns
+- simulate multi-turn conversations against the real backend preview pipeline
 
-Capabilities:
-- start test sessions
-- chat or email style sessions
-- optimistic UI for faster feel while the backend responds
-- session history display
-- guardrail diagnostics
-- source selection visibility
-- AI mode visibility
+Current behavior:
+- supports chat and email session styles
+- uses optimistic UI so customer messages appear immediately
+- shows an interim assistant-thinking state while waiting for the backend
+- renders session history
+- surfaces diagnostics from the backend
 
-The AI Test UI talks to:
+Current diagnostic visibility includes:
+- source selection
+- guardrail mode and reasons
+- policy overrides
+- tool status when present
+- retrieval and AI behavior signals returned by the backend
+
+This page talks to:
 - `/api/webhook/test/*`
 
 ### Shared content test modal
@@ -351,13 +384,16 @@ Used by:
 - Knowledge Base
 - Client Memory
 
-Purpose:
-- run scoped content tests
-- compare natural pipeline behavior with forced-item behavior
-- show ?Why This Failed? diagnostics
-- expose guardrails, source selection, and output quality signals
+Capabilities:
+- natural pipeline run
+- forced compare run
+- diagnostics about why an item did not win
+- guardrail visibility
+- selected evidence visibility
 
-## Operational / Manage Pages
+This is one of the most important QA/debugging surfaces in the frontend.
+
+## Operational and Management Surfaces
 
 ### Conversations
 
@@ -365,9 +401,9 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Tickets.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Tickets.jsx)
 
 Purpose:
-- browse conversation records
-- review escalations and statuses
-- inspect live support traffic
+- browse stored conversation records
+- inspect statuses, escalations, and outcomes
+- review support traffic
 
 ### Automation
 
@@ -375,7 +411,7 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Automation.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Automation.jsx)
 
 Purpose:
-- manage automation rules that can override escalation/status behavior after pipeline execution
+- manage deterministic automation rules that can affect escalation, status, and tags after the core pipeline runs
 
 ### Evaluations
 
@@ -383,16 +419,16 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Evaluations.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Evaluations.jsx)
 
 Purpose:
-- manage regression cases and run stored eval datasets
+- manage regression datasets and run stored evaluation cases against the preview pipeline
 
-Capabilities:
+Current capabilities:
 - create eval cases
-- select visible cases
-- run evaluations
-- inspect recent eval runs
-- inspect run reports and per-case actual vs expected behavior
+- select and filter cases
+- trigger eval runs
+- inspect recent runs
+- inspect per-case results and accuracy metrics
 
-This page uses the backend eval system and does not affect live traffic.
+This page is intentionally isolated from live traffic.
 
 ### Reviews
 
@@ -400,9 +436,9 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Reviews.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Reviews.jsx)
 
 Purpose:
-- inspect review/feedback records about AI performance
+- inspect review or QA-style records about AI behavior
 
-## Insight and Admin Pages
+## Operational Diagnostics Surfaces
 
 ### Admin Stats
 
@@ -410,27 +446,51 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\AdminStats.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/AdminStats.jsx)
 
 Purpose:
-- surface backend observability snapshots
+- operational diagnostics and health-style metrics
 
-It shows things like:
-- AI generation mode
+Examples of what it surfaces:
 - queue counts
 - request counts
 - failures
-- worker lag/duration
-- route-level activity
+- route activity
+- worker lag and duration
+- mode snapshots
 - channel mix
 
 Important note:
-- some metrics are process-local and should be treated as operational diagnostics, not globally authoritative distributed telemetry
+- some metrics are process-local and should be treated as operational diagnostics, not globally authoritative distributed observability
 
 ### Insights
 
 Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Insights.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Insights.jsx)
 
-Purpose:
-- show backend-generated insights and operational summaries
+The existing Insights page now carries more of the analytics surface.
+
+Current sections include:
+- operational insight cards
+- retrieval-quality analytics
+- AI cost accounting
+- issue outcome mix
+- ranked metric lists for SOP/KB/source performance
+
+Recent additions surfaced on the existing page include:
+- source win rate
+- selected SOP frequency
+- selected KB frequency
+- clarify rate by issue type
+- escalate rate by issue type
+- retrieval confidence distribution
+- policy override rate
+- memory reinforced rate
+- fallback retrieval rate
+- AI cost by stage
+- AI cost by channel
+- AI cost by issue type
+- AI cost by decision mode
+- AI cost trend
+
+No separate analytics page was created for these.
 
 ### AI Insights Panel
 
@@ -438,9 +498,9 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\AIInsightsPanel.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/AIInsightsPanel.jsx)
 
 Purpose:
-- expose AI-related insight panels inside the dashboard experience
+- display AI-centric signal panels in the dashboard experience
 
-## Configure Pages
+## Configuration Surfaces
 
 ### Companies
 
@@ -448,8 +508,8 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Companies.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Companies.jsx)
 
 Purpose:
-- manage company / workspace records
-- activate the current workspace from the dashboard
+- manage company/workspace records
+- support workspace activation and platform-level configuration flows
 
 ### Channels
 
@@ -457,7 +517,7 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Channels.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Channels.jsx)
 
 Purpose:
-- manage channel-level setup and channel-facing configuration
+- manage channel-level setup and configuration
 
 ### Team
 
@@ -465,118 +525,93 @@ Component:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Team.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Team.jsx)
 
 Purpose:
-- manage team members and workspace operators
+- manage team membership and operators
 
-## Local State Patterns
+## Local State and Interaction Patterns
 
-The frontend uses standard React local state for most page behavior.
+The frontend is deliberately local-state heavy instead of store-heavy.
 
-Common state types:
-- current page
-- auth state
+Common local state patterns:
+- active page
+- auth/session state
 - active workspace
-- form drafts
+- modal state
+- edit drafts
 - save pending / saved flags
-- modal visibility
-- compare mode toggles
-- selection state for eval cases and test cases
+- compare toggles
+- selection state for test/eval flows
 
-There is no separate global store like Redux.
-Most state is local to the page/component that owns it.
+This keeps the control plane relatively straightforward and avoids a broad client-state framework.
 
-## Save-State UX
+## Unsaved-Change UX
 
-A recurring frontend pattern is unsaved-change signaling.
+A recurring UX pattern across editing surfaces is explicit unsaved-change signaling.
 
-Implemented on major editing surfaces such as:
+Implemented on major authoring/config pages such as:
 - Agent Playbook
-- SOPs
 - Issue Types
+- SOPs
 - Knowledge Base
 - Client Memory
 
 Behavior:
-- save buttons glow when edits are pending
-- save labels reflect unsaved state
-- glow disappears after save
+- save buttons glow while drafts are dirty
+- labels reflect pending save state
+- the glow clears after save
 
-This is purely frontend guidance for the operator.
-The backend remains the source of truth.
+This reduces operator confusion when editing many settings-heavy surfaces.
 
-## API Usage Pattern by Page
+## Frontend Error Handling and Recovery
 
-Typical page pattern:
-1. read `client_id` from `getActiveClientId()`
-2. load data with `useApi(...)`
-3. mutate with `apiJson(...)`
-4. refetch on save/delete/test completion
-5. render operational diagnostics returned by backend
+Key behaviors:
+- unauthorized responses trigger a global auth reset flow
+- API failures surface in the page that initiated them
+- local dev config warnings are surfaced when API configuration is missing
+- the frontend treats the backend as authoritative and typically refetches after writes
 
-This keeps frontend pages thin and backend-driven.
-
-## Error Handling and Auth Recovery
-
-Frontend auth recovery behavior:
-- `401` responses dispatch `chatking:unauthorized`
-- app shell listens for that event
-- auth state is cleared
-- dashboard returns to login screen
-
-Configuration warning behavior:
-- if `VITE_API_URL` is missing, frontend shows a config warning and disables proper API behavior
-
-## Conversation and Testing Experience
-
-The frontend?s main conversation surfaces are:
-- AI Test
-- Conversations page
-- content sandboxes
-
-These surfaces do not implement AI logic.
-They send requests to backend preview or live-test routes and visualize:
-- responses
-- source selection
-- guardrails
-- eval/test comparisons
-- session history
-
-The frontend is intentionally diagnostic-heavy so operators can understand why the backend behaved a certain way.
+The frontend does not attempt to reconcile complex backend state locally.
 
 ## Frontend-to-Backend Contract Philosophy
 
-The frontend is mostly a control plane.
-It sends:
-- settings
-- content
+The core architectural rule is:
+- frontend configures, tests, and inspects
+- backend decides and executes
+
+The frontend sends:
+- authored content
+- playbook/settings
+- tool definitions
+- memory records
 - test inputs
-- eval definitions
-- memory entries
-- tool config
+- eval cases
 
 The backend decides:
 - classification
 - retrieval
 - policy enforcement
 - generation
+- tool execution
 - persistence
 - queueing
 - analytics
 
-That separation is the main architectural principle of the platform UI.
+That separation is intentional and still holds across the current platform.
 
-## End-to-End Operator Flow Example
+## Typical Operator Workflow
 
-For an operator updating the system:
-1. sign in through session-based admin auth
-2. select the active workspace in the sidebar
+For a normal operator workflow:
+1. sign in through admin session auth
+2. choose the active workspace
 3. edit Agent Playbook, Issue Types, SOPs, Knowledge Base, Client Memory, or Tools
-4. save changes through page-specific API calls
-5. test behavior in AI Test or content sandboxes
-6. inspect guardrails, source selection, and pipeline diagnostics
-7. run eval cases from the Evaluations page to catch regressions
-8. monitor Admin Stats, Insights, Conversations, and Reviews
+4. save changes through the page’s API calls
+5. validate behavior in AI Test or an item sandbox
+6. inspect source selection and guardrails
+7. run regression cases in Evaluations
+8. review Conversations, Reviews, Admin Stats, and Insights
 
-## Files Most Central to the Frontend
+This workflow reflects how the frontend is designed to be used day to day.
+
+## Most Central Frontend Files
 
 App shell:
 - [C:\Users\4star\Desktop\ChatKing V2\src\App.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/App.jsx)
@@ -589,9 +624,10 @@ Testing and diagnostics:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\AITestPanel.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/AITestPanel.jsx)
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\ContentTestModal.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/ContentTestModal.jsx)
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\AdminStats.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/AdminStats.jsx)
+- [C:\Users\4star\Desktop\ChatKing V2\src\components\Insights.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Insights.jsx)
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\Evaluations.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/Evaluations.jsx)
 
-Build surfaces:
+Build/config surfaces:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\IssueTypes.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/IssueTypes.jsx)
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\SOPs.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/SOPs.jsx)
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\KnowledgeBase.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/KnowledgeBase.jsx)
@@ -601,13 +637,14 @@ Build surfaces:
 Shared UI:
 - [C:\Users\4star\Desktop\ChatKing V2\src\components\ui.jsx](/C:/Users/4star/Desktop/ChatKing%20V2/src/components/ui.jsx)
 
-## Final Notes
+## Final Mental Model
 
-The frontend is designed to be:
-- tenant-aware
-- backend-driven
-- highly diagnostic
-- safe for iterative testing
+The frontend is best understood as a tenant-aware operator dashboard with four jobs:
 
-Its main role is not to decide AI behavior.
-Its job is to make backend behavior configurable, testable, inspectable, and operable.
+1. configure the agent
+2. test the agent
+3. inspect the agent
+4. operate the platform
+
+It is intentionally diagnostic-heavy and backend-driven.
+Its role is to make backend behavior configurable, testable, and observable without moving the actual AI decision logic into the browser.
