@@ -347,6 +347,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
   const [greeting, setGreeting, undoGreeting, canUndoGreeting] = useUndoState("Hi! I'm Aria, your support assistant. How can I help you today?");
   const [fallback, setFallback, undoFallback, canUndoFallback] = useUndoState("I'm sorry, I didn't quite catch that. Let me connect you with a human agent.");
   const [confidenceThreshold, setConfidenceThreshold, undoConfidenceThreshold, canUndoConfidenceThreshold] = useUndoState("0.72");
+  const [responseDelayChatMs, setResponseDelayChatMs, undoResponseDelayChatMs, canUndoResponseDelayChatMs] = useUndoState("0");
+  const [responseDelayEmailMs, setResponseDelayEmailMs, undoResponseDelayEmailMs, canUndoResponseDelayEmailMs] = useUndoState("0");
+  const [responseDelayWhatsAppMs, setResponseDelayWhatsAppMs, undoResponseDelayWhatsAppMs, canUndoResponseDelayWhatsAppMs] = useUndoState("0");
 
   const [contextText,     setContextText,     undoContext,     canUndoContext    ] = useUndoState(
   `We are a Shopify-based ecommerce store helping customers with orders, shipping, returns, billing, promotions, and product questions.
@@ -394,6 +397,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       greeting: s.greeting ?? greeting,
       fallback: s.fallback ?? fallback,
       confidenceThreshold: String(s.confidence_threshold ?? confidenceThreshold),
+      responseDelayChatMs: String(s.response_delay_chat_ms ?? responseDelayChatMs),
+      responseDelayEmailMs: String(s.response_delay_email_ms ?? responseDelayEmailMs),
+      responseDelayWhatsAppMs: String(s.response_delay_whatsapp_ms ?? responseDelayWhatsAppMs),
       contextText: s.context_text ?? contextText,
       escalationsText: s.escalations_text ?? escalationsText,
       toneChat: s.tone_chat ?? toneChat,
@@ -407,6 +413,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     setGreeting(nextSnapshot.greeting);
     setFallback(nextSnapshot.fallback);
     setConfidenceThreshold(nextSnapshot.confidenceThreshold);
+    setResponseDelayChatMs(nextSnapshot.responseDelayChatMs);
+    setResponseDelayEmailMs(nextSnapshot.responseDelayEmailMs);
+    setResponseDelayWhatsAppMs(nextSnapshot.responseDelayWhatsAppMs);
     setContextText(nextSnapshot.contextText);
     setEscalationsText(nextSnapshot.escalationsText);
     setToneChat(nextSnapshot.toneChat);
@@ -444,7 +453,10 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       return !sameValue(botName, snapshot.botName)
         || !sameValue(greeting, snapshot.greeting)
         || !sameValue(fallback, snapshot.fallback)
-        || !sameValue(confidenceThreshold, snapshot.confidenceThreshold);
+        || !sameValue(confidenceThreshold, snapshot.confidenceThreshold)
+        || !sameValue(responseDelayChatMs, snapshot.responseDelayChatMs)
+        || !sameValue(responseDelayEmailMs, snapshot.responseDelayEmailMs)
+        || !sameValue(responseDelayWhatsAppMs, snapshot.responseDelayWhatsAppMs);
     }
     if (sectionId === "context") {
       return !sameValue(contextText, snapshot.contextText);
@@ -473,6 +485,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       payload.greeting = greeting;
       payload.fallback = fallback;
       payload.confidence_threshold = Number(confidenceThreshold || 0.72);
+      payload.response_delay_chat_ms = Number(responseDelayChatMs || 0);
+      payload.response_delay_email_ms = Number(responseDelayEmailMs || 0);
+      payload.response_delay_whatsapp_ms = Number(responseDelayWhatsAppMs || 0);
     }
     if (section === "all" || section === "context") {
       payload.context_text = contextText;
@@ -495,7 +510,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
 
   function getSectionSnapshot(sectionId) {
     if (sectionId === "identity") {
-      return { botName, greeting, fallback, confidenceThreshold };
+      return { botName, greeting, fallback, confidenceThreshold, responseDelayChatMs, responseDelayEmailMs, responseDelayWhatsAppMs };
     }
     if (sectionId === "context") {
       return { contextText };
@@ -519,6 +534,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       if (snapshot.greeting !== undefined) setGreeting(snapshot.greeting);
       if (snapshot.fallback !== undefined) setFallback(snapshot.fallback);
       if (snapshot.confidenceThreshold !== undefined) setConfidenceThreshold(snapshot.confidenceThreshold);
+      if (snapshot.responseDelayChatMs !== undefined) setResponseDelayChatMs(snapshot.responseDelayChatMs);
+      if (snapshot.responseDelayEmailMs !== undefined) setResponseDelayEmailMs(snapshot.responseDelayEmailMs);
+      if (snapshot.responseDelayWhatsAppMs !== undefined) setResponseDelayWhatsAppMs(snapshot.responseDelayWhatsAppMs);
     }
     if (sectionId === "context" && snapshot.contextText !== undefined) {
       setContextText(snapshot.contextText);
@@ -596,6 +614,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     setGreeting(snapshot.greeting);
     setFallback(snapshot.fallback);
     setConfidenceThreshold(snapshot.confidenceThreshold);
+    setResponseDelayChatMs(snapshot.responseDelayChatMs);
+    setResponseDelayEmailMs(snapshot.responseDelayEmailMs);
+    setResponseDelayWhatsAppMs(snapshot.responseDelayWhatsAppMs);
     setContextText(snapshot.contextText);
     setEscalationsText(snapshot.escalationsText);
     setToneChat(snapshot.toneChat);
@@ -694,8 +715,8 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     if (editorSection === "identity") {
       return (
         <div ref={identityRef} style={{ scrollMarginTop: "96px" }}>
-          <FieldHeader title="Core Settings" onUndo={() => { undoBotName(); undoGreeting(); undoFallback(); undoConfidenceThreshold(); }} canUndo={canUndoBotName || canUndoGreeting || canUndoFallback || canUndoConfidenceThreshold} saveSectionId="identity" />
-          <p style={{ ...guideStyle, marginBottom: "16px" }}>These values influence the agent opening, fallback behavior, and how conservative it should be before escalating or asking a clarifying question.</p>
+          <FieldHeader title="Core Settings" onUndo={() => { undoBotName(); undoGreeting(); undoFallback(); undoConfidenceThreshold(); undoResponseDelayChatMs(); undoResponseDelayEmailMs(); undoResponseDelayWhatsAppMs(); }} canUndo={canUndoBotName || canUndoGreeting || canUndoFallback || canUndoConfidenceThreshold || canUndoResponseDelayChatMs || canUndoResponseDelayEmailMs || canUndoResponseDelayWhatsAppMs} saveSectionId="identity" />
+          <p style={{ ...guideStyle, marginBottom: "16px" }}>These values influence the agent opening, fallback behavior, confidence threshold, and optional channel-specific response delays. Response delays are applied after the reply is generated, so they control when the customer receives it, not how long the AI thinks.</p>
           <div style={{ display: "grid", gap: "18px", gridTemplateColumns: "1fr 160px" }}>
             <div>
               <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: t.textSub, marginBottom: "8px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Bot Name</label>
@@ -707,6 +728,18 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
             </div>
           </div>
           <div style={{ display: "grid", gap: "18px", marginTop: "18px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: t.textSub, marginBottom: "8px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Chat Delay (ms)</label>
+                <input value={responseDelayChatMs} onChange={e => setResponseDelayChatMs(e.target.value)} type="number" min="0" step="1000" style={{ ...taStyle, resize: "none", padding: "14px 16px" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: t.textSub, marginBottom: "8px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Email Delay (ms)</label>
+                <input value={responseDelayEmailMs} onChange={e => setResponseDelayEmailMs(e.target.value)} type="number" min="0" step="1000" style={{ ...taStyle, resize: "none", padding: "14px 16px" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: t.textSub, marginBottom: "8px", letterSpacing: "0.04em", textTransform: "uppercase" }}>WhatsApp Delay (ms)</label>
+                <input value={responseDelayWhatsAppMs} onChange={e => setResponseDelayWhatsAppMs(e.target.value)} type="number" min="0" step="1000" style={{ ...taStyle, resize: "none", padding: "14px 16px" }} />
+              </div>
               <div>
                 <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: t.textSub, marginBottom: "8px", letterSpacing: "0.04em", textTransform: "uppercase" }}>Greeting</label>
                 <RichTextEditor
@@ -908,7 +941,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       </Card>
 
       <div style={{ display: "grid", gap: "14px" }}>
-        <SectionBar id="identity" title="Core Settings" description="Bot identity, greeting, fallback behavior, and confidence threshold." preview={`${botName}. Greeting: ${greeting} Fallback: ${fallback}`} />
+        <SectionBar id="identity" title="Core Settings" description="Bot identity, greeting, fallback behavior, confidence threshold, and optional per-channel response delays." preview={`${botName}. Greeting: ${greeting} Fallback: ${fallback} Delays: chat ${responseDelayChatMs}ms, email ${responseDelayEmailMs}ms, WhatsApp ${responseDelayWhatsAppMs}ms`} />
         <SectionBar id="context" title="Business Context" description="The standing business rules, policies, and operating constraints the agent should follow first." preview={contextText} />
         <SectionBar id="escalations" title="Escalations" description="The situations where the AI must stop and hand the ticket to a human." preview={escalationsText} />
         <SectionBar id="tone" title="Tone & Style" description="Channel-specific response style for chat, email, and WhatsApp." preview={`Chat: ${toneChat} Email: ${toneEmail} WhatsApp: ${toneWA}`} />
