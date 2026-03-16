@@ -31,18 +31,18 @@ function MessageBubble({ message, t, accent }) {
         style={{
           maxWidth: fromCustomer ? "56%" : "72%",
           background: fromCustomer ? `${accent}18` : t.surfaceHover,
-          border: `1px solid ${fromCustomer ? `${accent}40` : t.border}`,
+          border: `1px solid ${message.isPending ? `${accent}33` : fromCustomer ? `${accent}40` : t.border}`,
           borderRadius: "18px",
           padding: "12px 14px",
           color: t.text,
           fontSize: "13px",
           lineHeight: "1.7",
-          boxShadow: fromCustomer ? "none" : t.shadow,
+          boxShadow: fromCustomer ? "none" : message.isPending ? "none" : t.shadow,
           width: "fit-content",
         }}
       >
         <div style={{ fontSize: "10px", fontWeight: "700", color: fromCustomer ? accent : t.textMuted, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          {fromCustomer ? "Customer" : "Agent"}
+          {fromCustomer ? "Customer" : message.isPending ? "Agent thinking" : "Agent"}
         </div>
         <div style={{ whiteSpace: "pre-wrap" }}>{message.content}</div>
       </div>
@@ -67,6 +67,7 @@ export function AITestPanel({ t, accent }) {
   const [subject, setSubject] = useState("Question about a recent order");
   const [draftMessage, setDraftMessage] = useState("");
   const [lastReply, setLastReply] = useState("");
+  const [pendingAgentMessageId, setPendingAgentMessageId] = useState("");
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) || null;
 
@@ -97,6 +98,7 @@ export function AITestPanel({ t, accent }) {
     if (!sessionId) {
       setMessages([]);
       setLastReply("");
+      setPendingAgentMessageId("");
       return;
     }
 
@@ -110,6 +112,7 @@ export function AITestPanel({ t, accent }) {
         throw new Error("Failed to load session messages.");
       }
       setMessages(data);
+      setPendingAgentMessageId("");
       const latestBot = [...data].reverse().find((item) => item.sender_type === "bot");
       setLastReply(latestBot?.content || "");
     } catch (nextError) {
@@ -161,23 +164,37 @@ export function AITestPanel({ t, accent }) {
   async function handleSendMessage() {
     if (!activeSession || !draftMessage.trim()) return;
 
+    const outgoingMessage = draftMessage.trim();
+    const optimisticCustomerId = `optimistic-customer-${Date.now()}`;
+    const optimisticAgentId = `optimistic-agent-${Date.now()}`;
+
     setSendingMessage(true);
     setError("");
+    setDraftMessage("");
+    setPendingAgentMessageId(optimisticAgentId);
+    setMessages((current) => ([
+      ...current,
+      { id: optimisticCustomerId, sender_type: "customer", content: outgoingMessage, created_at: new Date().toISOString() },
+      { id: optimisticAgentId, sender_type: "bot", content: "Thinking...", created_at: new Date().toISOString(), isPending: true },
+    ]));
 
     try {
       const payload = await apiJson(`/api/webhook/test/sessions/${activeSession.id}/messages`, {
         method: "POST",
         body: {
           client_id: getActiveClientId(),
-          message: draftMessage.trim(),
+          message: outgoingMessage,
         },
       });
 
       setMessages(payload.messages || []);
+      setPendingAgentMessageId("");
       setLastReply(payload.reply || "");
-      setDraftMessage("");
-      await loadSessions(activeSession.id);
+      loadSessions(activeSession.id);
     } catch (nextError) {
+      setMessages((current) => current.filter((message) => message.id !== optimisticCustomerId && message.id !== optimisticAgentId));
+      setPendingAgentMessageId("");
+      setDraftMessage(outgoingMessage);
       setError(nextError.message || "Failed to send test message.");
     } finally {
       setSendingMessage(false);

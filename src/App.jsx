@@ -433,6 +433,38 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     }
   }, [defaultSub]);
 
+  function sameValue(left, right) {
+    return String(left ?? "").trim() === String(right ?? "").trim();
+  }
+
+  function isSectionDirty(sectionId = "all") {
+    if (!snapshot) return false;
+
+    if (sectionId === "identity") {
+      return !sameValue(botName, snapshot.botName)
+        || !sameValue(greeting, snapshot.greeting)
+        || !sameValue(fallback, snapshot.fallback)
+        || !sameValue(confidenceThreshold, snapshot.confidenceThreshold);
+    }
+    if (sectionId === "context") {
+      return !sameValue(contextText, snapshot.contextText);
+    }
+    if (sectionId === "escalations") {
+      return !sameValue(escalationsText, snapshot.escalationsText);
+    }
+    if (sectionId === "tone") {
+      return !sameValue(toneChat, snapshot.toneChat)
+        || !sameValue(toneEmail, snapshot.toneEmail)
+        || !sameValue(toneWA, snapshot.toneWA);
+    }
+    if (sectionId === "capabilities") {
+      return !sameValue(allowedText, snapshot.allowedText)
+        || !sameValue(blockedText, snapshot.blockedText);
+    }
+
+    return ["identity", "context", "escalations", "tone", "capabilities"].some((key) => isSectionDirty(key));
+  }
+
   function buildSavePayload(section = "all") {
     const payload = { client_id: activeClientId };
 
@@ -617,6 +649,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
   function FieldHeader({ title, onUndo, canUndo, saveSectionId = "" }) {
     const isSaving = savingKey === saveSectionId;
     const isSaved = savedKey === saveSectionId;
+    const isDirty = saveSectionId ? isSectionDirty(saveSectionId) : false;
 
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", gap: "12px" }}>
@@ -638,9 +671,12 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
                 padding: "8px 14px",
                 cursor: savingKey ? "default" : "pointer",
                 opacity: savingKey && !isSaving ? 0.6 : 1,
+                boxShadow: !isSaving && !isSaved && isDirty ? `0 0 0 1px ${accent}55, 0 0 22px ${accent}55` : "none",
+                transform: !isSaving && !isSaved && isDirty ? "translateY(-1px)" : "none",
+                transition: "box-shadow 0.18s ease, transform 0.18s ease, opacity 0.18s ease",
               }}
             >
-              {isSaving ? "Saving..." : isSaved ? "Saved" : "Save"}
+              {isSaving ? "Saving..." : isSaved ? "Saved" : isDirty ? "Save*" : "Save"}
             </button>
           ) : null}
         </div>
