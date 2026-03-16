@@ -59,6 +59,53 @@ function KeyValueList({ title, items, t, accent, empty = "No data yet." }) {
   );
 }
 
+function ReadinessPanel({ title, readiness, t, accent, emptyText }) {
+  const blockers = readiness?.blockers || [];
+  const warnings = readiness?.warnings || [];
+  const status = readiness?.status || "unknown";
+  const statusColor = status === "ready"
+    ? "#34D399"
+    : status === "ready_with_warnings"
+      ? "#F59E0B"
+      : "#FB7185";
+
+  return (
+    <Card t={t} style={{ overflow: "hidden" }}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+        <div style={{ fontSize: "13px", fontWeight: "700", color: t.text }}>{title}</div>
+        <Tag color={statusColor}>{status.replace(/_/g, " ")}</Tag>
+      </div>
+      {!readiness ? (
+        <div style={{ padding: "20px 16px", fontSize: "12px", color: t.textMuted }}>{emptyText}</div>
+      ) : (
+        <div style={{ padding: "14px 16px" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: blockers.length || warnings.length ? "12px" : "0" }}>
+            <Pill t={t} accent={statusColor} active={false}>Blockers: {blockers.length}</Pill>
+            <Pill t={t} accent={accent} active={false}>Warnings: {warnings.length}</Pill>
+          </div>
+          {blockers.length ? blockers.map((item) => (
+            <div key={item.code} style={{ padding: "10px 12px", borderRadius: "10px", background: "rgba(251,113,133,0.08)", border: "1px solid rgba(251,113,133,0.18)", marginBottom: "10px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "#FB7185", marginBottom: "4px" }}>{item.title}</div>
+              <div style={{ fontSize: "12px", color: t.textMuted, lineHeight: 1.5 }}>{item.detail}</div>
+            </div>
+          )) : null}
+          {warnings.length ? warnings.map((item) => (
+            <div key={item.code} style={{ padding: "10px 12px", borderRadius: "10px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.18)", marginBottom: "10px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "#F59E0B", marginBottom: "4px" }}>{item.title}</div>
+              <div style={{ fontSize: "12px", color: t.textMuted, lineHeight: 1.5 }}>{item.detail}</div>
+            </div>
+          )) : null}
+          {!blockers.length && !warnings.length ? (
+            <div style={{ fontSize: "12px", color: t.textMuted, lineHeight: 1.5 }}>
+              No readiness blockers or warnings detected.
+            </div>
+          ) : null}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function AdminStats({ t, accent }) {
   const clientId = getActiveClientId();
   const { data, loading, error, refetch } = useApi(
@@ -72,6 +119,7 @@ export function AdminStats({ t, accent }) {
   const aiMetrics = metrics.ai || {};
   const jobMetrics = metrics.jobs || {};
   const queue = data?.jobs || {};
+  const readiness = data?.readiness || {};
 
   const requestRouteRows = useMemo(() => {
     return Object.entries(requestMetrics.byRoute || {})
@@ -172,6 +220,23 @@ export function AdminStats({ t, accent }) {
             )}
           </div>
         </Card>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "18px" }}>
+        <ReadinessPanel
+          title="Platform Readiness"
+          readiness={readiness.platform}
+          t={t}
+          accent={accent}
+          emptyText="Platform launch readiness appears here after the backend returns readiness data."
+        />
+        <ReadinessPanel
+          title="Workspace Go-Live"
+          readiness={readiness.workspace}
+          t={t}
+          accent={accent}
+          emptyText="Workspace go-live readiness appears here for the active client."
+        />
       </div>
 
       <KeyValueList title="Busiest Routes (Process)" items={requestRouteRows} t={t} accent={accent} empty="No request traffic recorded yet." />
