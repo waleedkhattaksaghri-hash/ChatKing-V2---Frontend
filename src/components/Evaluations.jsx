@@ -1,417 +1,427 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiJson, getActiveClientId } from "../lib/api";
 import { useApi } from "../lib/useApi";
-import { Card, Pill, SectionHeader } from "./ui";
-export function Evaluations({ t, accent, evaluatedIds, setEvaluatedIds }) {
-  const clientId = getActiveClientId();
-  const [period, setPeriod] = useState("week");
-  const [evalTicket, setEvalTicket] = useState(null);
-  const [rating, setRating] = useState(null);
-  const [feedback, setFeedback] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [justSubmitted, setJustSubmitted] = useState(false);
-  const [filterTask, setFilterTask] = useState("all");
-  const [filterIssue, setFilterIssue] = useState("all");
-  const [filterSop, setFilterSop] = useState("all");
-  const [filterChannel, setFilterChannel] = useState("all");
+import { Card, Pill, SectionHeader, Tag, Toggle } from "./ui";
 
-  const days = period === "today" ? 1 : period === "week" ? 7 : 30;
-  const { data: rawConvs, loading: convsLoading } = useApi(`/api/conversations?client_id=${clientId}&limit=500`, null, [clientId]);
-  const { data: analytics7  } = useApi(`/api/analytics?client_id=${clientId}&days=7`, null, [clientId]);
-  const { data: analytics30 } = useApi(`/api/analytics?client_id=${clientId}&days=30`, null, [clientId]);
-  const { data: analytics1  } = useApi(`/api/analytics?client_id=${clientId}&days=1`, null, [clientId]);
-  const { data: rawIntentsEval } = useApi(`/api/analytics/intents?client_id=${clientId}&limit=30`, null, [clientId]);
-  const { data: rawSopsEval    } = useApi(`/api/sops?client_id=${clientId}`, null, [clientId]);
-  const { data: rawReviewsEval } = useApi(`/api/reviews?client_id=${clientId}`, null, [clientId]);
+const EMPTY_CASE = {
+  name: "",
+  input_message: "",
+  input_subject: "",
+  input_channel: "chat",
+  customer_name: "Test Customer",
+  customer_email: "test@example.com",
+  expected_issue_type_id: "",
+  expected_issue_type_name: "",
+  expected_decision: "",
+  expected_sop_id: "",
+  expected_sop_title: "",
+  expected_kb_id: "",
+  expected_kb_title: "",
+  notes: "",
+  active: true,
+};
 
-  const intentOptions  = (rawIntentsEval || []).map(i => i.intent).filter(Boolean);
-  const sopOptions     = (rawSopsEval || []).map((s) => s.title || s.name).filter(Boolean);
-  const channelOptions = ["email","chat","whatsapp","sms"];
-
-  // Build ticket list from real conversations (non-escalated = AI managed)
-  const allEvalTickets = (rawConvs || [])
-    .filter(c => !c.escalated)
-    .filter(c => filterIssue   === "all" || c.intent   === filterIssue)
-    .filter(c => filterSop     === "all" || c.sop_used === filterSop)
-    .filter(c => filterChannel === "all" || c.channel  === filterChannel)
-    .map(c => ({
-      id:          c.id,
-      customer:    c.customer_name || c.customer_email || "Customer",
-      email:       c.customer_email,
-      channel:     c.channel,
-      status:      c.status,
-      sopTag:      c.sop_used || "Agent",
-      champStatus: "AI Managed",
-      preview:     (c.user_message || "").slice(0, 60),
-      messages: [
-        { from: "customer", name: c.customer_name || "Customer",
-          time: c.created_at ? new Date(c.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "",
-          text: c.user_message || "" },
-        ...(c.intent ? [{ from: "system", text:
-          `Issue Type: ${c.intent}${c.sop_used ? ` · SOP: ${c.sop_used}` : ""}${c.confidence ? ` · Confidence: ${(c.confidence*100).toFixed(0)}%` : ""}` }] : []),
-        { from: "agent", name: "Aria AI",
-          time: c.created_at ? new Date(new Date(c.created_at).getTime()+12000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "",
-          text: c.bot_response || "" },
-      ],
-    }));
-
-  const pendingTickets = allEvalTickets.filter(tk => !evaluatedIds.has(tk.id));
-  const doneCount      = allEvalTickets.length - pendingTickets.length;
-
-  // Real analytics for stats table
-  const s1  = analytics1?.summary  || {};
-  const s7  = analytics7?.summary  || {};
-  const s30 = analytics30?.summary || {};
-  const reviews = rawReviewsEval || [];
-  const positiveReviews = reviews.filter(r => r.rating === "positive").length;
-  const totalReviews    = reviews.length;
-
-  function accStr(reviewed, total) {
-    if (!total) return "N/A";
-    if (!reviewed) return "0 reviewed";
-    const pct = Math.round((reviewed / total) * 100);
-    return `${pct}% positive (${reviewed} reviewed)`;
-  }
-
-  const rows = [
-    { label: "Conversations",
-      cols: [
-        `${(s1.total_messages||0).toLocaleString()} total`,
-        `${(s7.total_messages||0).toLocaleString()} total`,
-        `${(s30.total_messages||0).toLocaleString()} total`,
-      ],
-      accuracy: [
-        `${s1.containment_rate||"0.0"}% contained`,
-        `${s7.containment_rate||"0.0"}% contained`,
-        `${s30.containment_rate||"0.0"}% contained`,
-      ]
-    },
-    { label: "AI Handled",
-      cols: [
-        `${(s1.automated_responses||0).toLocaleString()} automated`,
-        `${(s7.automated_responses||0).toLocaleString()} automated`,
-        `${(s30.automated_responses||0).toLocaleString()} automated`,
-      ],
-      accuracy: [
-        `${(s1.escalations||0)} escalated`,
-        `${(s7.escalations||0)} escalated`,
-        `${(s30.escalations||0)} escalated`,
-      ]
-    },
-    { label: "AI Response Quality",
-      cols: [
-        `${totalReviews} total reviews`,
-        `${totalReviews} total reviews`,
-        `${totalReviews} total reviews`,
-      ],
-      accuracy: [
-        accStr(positiveReviews, totalReviews),
-        accStr(positiveReviews, totalReviews),
-        accStr(positiveReviews, totalReviews),
-      ]
-    },
-  ];
-
-  function openTicket(tk) {
-    setEvalTicket(tk);
-    setRating(null);
-    setFeedback("");
-    setJustSubmitted(false);
-  }
-
-  async function handleSubmit() {
-    if (!rating || !evalTicket) return;
-    setSubmitting(true);
-
-    // Extract issue type from system message
-    const sysMsg = evalTicket.messages.find(m => m.from === "system");
-    const issueType = sysMsg ? (sysMsg.text.split("Issue Type: ")[1]?.split(" · ")[0] || "General Support") : "General Support";
-
-    // Last AI response text
-    const aiMsgs = evalTicket.messages.filter(m => m.from === "agent");
-    const aiResponse = aiMsgs[aiMsgs.length - 1]?.text || "";
-
-    // Save to API
-    try {
-      await apiJson("/api/reviews", {
-        method: "POST",
-        body: {
-          client_id:   clientId,
-          ticket_id:   evalTicket.id,
-          customer:    evalTicket.customer,
-          issue_type:  issueType,
-          sop_used:    evalTicket.sopTag || null,
-          ai_response: aiResponse,
-          rating,
-          feedback: feedback.trim() || (rating === "positive" ? "No issues — AI handled this correctly." : "No specific feedback provided."),
-          reviewer: "Team",
-        },
-      });
-    } catch(e) { console.error("Review save failed:", e); }
-
-    setEvaluatedIds(prev => new Set([...prev, evalTicket.id]));
-
-    // Find the next pending ticket (excluding the one just submitted)
-    const nextPending = pendingTickets.filter(tk => tk.id !== evalTicket.id);
-
-    setTimeout(() => {
-      setSubmitting(false);
-      setJustSubmitted(true);
-      setTimeout(() => {
-        if (nextPending.length > 0) {
-          openTicket(nextPending[0]);
-        } else {
-          setEvalTicket(null);
-          setJustSubmitted(false);
-        }
-      }, 1200);
-    }, 400);
-  }
-
-  return (
-    <div style={{ display: "flex", gap: "20px", alignItems: "flex-start" }}>
-      {/* Left — filters + stats */}
-      <div style={{ flex: 1 }}>
-        <SectionHeader title="Evaluations" sub="Review AI agent performance across triage, SOP execution, and response quality." t={t} />
-
-        {/* Filter row */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
-          <select value={filterIssue} onChange={e => setFilterIssue(e.target.value)}
-            style={{ background: t.surfaceHover, border: `1px solid ${t.border}`,
-              borderRadius: "8px", color: t.textSub, fontSize: "13px", padding: "9px 12px",
-              outline: "none", cursor: "pointer", width: "340px" }}>
-            <option value="all">Issue Types (All)</option>
-            {intentOptions.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-          <select value={filterSop} onChange={e => setFilterSop(e.target.value)}
-            style={{ background: t.surfaceHover, border: `1px solid ${t.border}`,
-              borderRadius: "8px", color: t.textSub, fontSize: "13px", padding: "9px 12px",
-              outline: "none", cursor: "pointer", width: "340px" }}>
-            <option value="all">SOPs (All)</option>
-            {sopOptions.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-          <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)}
-            style={{ background: t.surfaceHover, border: `1px solid ${t.border}`,
-              borderRadius: "8px", color: t.textSub, fontSize: "13px", padding: "9px 12px",
-              outline: "none", cursor: "pointer", width: "340px" }}>
-            <option value="all">Channels (All)</option>
-            {channelOptions.map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-          </select>
-          {/* Date range */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <input type="date" style={{ background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "8px",
-              color: t.textSub, fontSize: "13px", padding: "8px 12px", outline: "none", cursor: "pointer" }} />
-            <span style={{ color: t.textMuted, fontSize: "13px" }}>to</span>
-            <input type="date" style={{ background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "8px",
-              color: t.textSub, fontSize: "13px", padding: "8px 12px", outline: "none", cursor: "pointer" }} />
-            <button style={{ background: accent, border: "none", borderRadius: "8px", color: "#fff",
-              fontSize: "13px", fontWeight: "600", padding: "8px 18px", cursor: "pointer" }}>Apply</button>
-          </div>
-        </div>
-
-        {/* Period toggle */}
-        <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
-          {[["today","Today"],["week","Last 7 Days"],["month","Last 30 Days"]].map(([val,label]) => (
-            <Pill key={val} active={period === val} accent={accent} onClick={() => setPeriod(val)} t={t}>{label}</Pill>
-          ))}
-        </div>
-
-        {/* Stats table */}
-        <Card t={t} style={{ overflow: "hidden", marginBottom: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr",
-            padding: "10px 16px", borderBottom: `1px solid ${t.border}`,
-            fontSize: "10px", fontWeight: "700", color: t.textMuted, textTransform: "uppercase", letterSpacing: "0.07em" }}>
-            <span></span><span>Today</span><span>Last 7 days</span><span>Last 30 days</span>
-          </div>
-          {rows.map((row, ri) => (
-            <div key={row.label} style={{ borderBottom: ri < rows.length - 1 ? `1px solid ${t.borderLight}` : "none" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr",
-                padding: "12px 16px", alignItems: "start" }}>
-                <span style={{ fontSize: "13px", fontWeight: "600", color: t.text }}>{row.label}</span>
-                {row.cols.map((col, ci) => (
-                  <div key={ci}>
-                    <div style={{ fontSize: "12px", color: t.textSub }}>{col}</div>
-                    <div style={{ fontSize: "11px", color: row.accuracy[ci] === "N/A" ? t.textMuted : "#10B981", marginTop: "2px" }}>
-                      {row.accuracy[ci]}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </Card>
-
-        {convsLoading && (
-          <div style={{ padding: "20px", textAlign: "center", color: t.textMuted, fontSize: "12px" }}>Loading conversations…</div>
-        )}
-
-        {/* Progress + ticket list */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-          <div style={{ fontSize: "13px", fontWeight: "700", color: t.text }}>
-            Tickets Pending Evaluation
-            <span style={{ marginLeft: "8px", fontSize: "12px", fontWeight: "400", color: t.textMuted }}>
-              ({pendingTickets.length} remaining · {doneCount} evaluated)
-            </span>
-          </div>
-          {pendingTickets.length > 0 && (
-            <button onClick={() => openTicket(pendingTickets[0])} style={{
-              background: accent, border: "none", borderRadius: "7px", color: "#fff",
-              fontSize: "12px", fontWeight: "600", padding: "6px 14px", cursor: "pointer",
-            }}>Start Queue →</button>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        {allEvalTickets.length > 0 && (
-          <div style={{ marginBottom: "16px" }}>
-            <div style={{ height: "6px", background: t.border, borderRadius: "3px", overflow: "hidden" }}>
-              <div style={{ height: "100%", borderRadius: "3px", background: `linear-gradient(90deg, ${accent}, ${accent}99)`,
-                width: `${(doneCount / allEvalTickets.length) * 100}%`, transition: "width 0.4s ease" }} />
-            </div>
-            <div style={{ fontSize: "11px", color: t.textMuted, marginTop: "4px" }}>
-              {doneCount} of {allEvalTickets.length} evaluated
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          {allEvalTickets.map((tk, i) => {
-            const isDone   = evaluatedIds.has(tk.id);
-            const isActive = evalTicket?.id === tk.id;
-            return (
-              <div key={tk.id} onClick={() => !isDone && openTicket(tk)}
-                style={{ display: "flex", alignItems: "center", gap: "14px",
-                  background: isActive ? `${accent}12` : isDone ? t.surfaceHover : t.surface,
-                  border: `1px solid ${isActive ? accent : isDone ? t.borderLight : t.border}`,
-                  borderRadius: "10px", padding: "11px 16px",
-                  cursor: isDone ? "default" : "pointer",
-                  opacity: isDone ? 0.6 : 1, transition: "all 0.15s" }}
-                onMouseEnter={e => { if (!isDone) e.currentTarget.style.background = `${accent}08`; }}
-                onMouseLeave={e => { if (!isDone) e.currentTarget.style.background = isActive ? `${accent}12` : t.surface; }}
-              >
-                <div style={{ width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0,
-                  background: isDone ? "#10B98120" : `${accent}20`,
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px" }}>
-                  {isDone ? "✓" : "⚡"}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "13px", fontWeight: "600", color: t.text }}>{tk.customer}</div>
-                  <div style={{ fontSize: "11px", color: t.textSub }}>{tk.sopTag} · #{tk.id}</div>
-                </div>
-                {isDone
-                  ? <span style={{ fontSize: "11px", color: "#10B981", fontWeight: "600" }}>Evaluated ✓</span>
-                  : <span style={{ fontSize: "11px", color: accent }}>
-                      {isActive ? "Evaluating…" : `#${pendingTickets.indexOf(tk) + 1} in queue`}
-                    </span>
-                }
-              </div>
-            );
-          })}
-          {pendingTickets.length === 0 && (
-            <div style={{ padding: "24px", textAlign: "center", color: "#10B981", fontSize: "13px", fontWeight: "600",
-              background: "#10B98110", borderRadius: "10px", border: "1px solid #10B98130" }}>
-              ✓ All tickets evaluated — check Reviews to see your submitted feedback.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Right — evaluation panel */}
-      {evalTicket && (
-        <div style={{ width: "380px", flexShrink: 0 }}>
-          <Card t={t} style={{ padding: "20px", position: "sticky", top: "20px" }}>
-
-            {/* Header with progress */}
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "14px" }}>
-              <div>
-                <div style={{ fontSize: "14px", fontWeight: "700", color: t.text }}>Evaluate Ticket</div>
-                <div style={{ fontSize: "11px", color: t.textSub, marginTop: "2px" }}>#{evalTicket.id} · {evalTicket.customer}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "11px", color: t.textMuted }}>
-                  {pendingTickets.findIndex(tk => tk.id === evalTicket.id) + 1} of {pendingTickets.length} pending
-                </div>
-                {pendingTickets.length > 1 && (
-                  <button onClick={() => {
-                    const idx = pendingTickets.findIndex(tk => tk.id === evalTicket.id);
-                    const next = pendingTickets[(idx + 1) % pendingTickets.length];
-                    openTicket(next);
-                  }} style={{ background: "none", border: "none", color: accent, fontSize: "11px",
-                    cursor: "pointer", padding: 0, marginTop: "2px" }}>Skip →</button>
-                )}
-              </div>
-            </div>
-
-            {/* Conversation preview */}
-            <div style={{ background: t.surfaceHover, borderRadius: "8px", padding: "12px", marginBottom: "16px",
-              maxHeight: "220px", overflowY: "auto" }}>
-              {evalTicket.messages.filter(m => m.from !== "system").map((msg, i) => (
-                <div key={i} style={{ marginBottom: "8px" }}>
-                  <span style={{ fontSize: "10px", fontWeight: "700", color: msg.from === "agent" ? accent : t.textSub }}>
-                    {msg.from === "agent" ? "Aria AI" : evalTicket.customer}:
-                  </span>
-                  <p style={{ fontSize: "12px", color: t.text, marginTop: "2px", lineHeight: "1.5", margin: "2px 0 0" }}>{msg.text}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Rating */}
-            <div style={{ fontSize: "12px", fontWeight: "600", color: t.text, marginBottom: "10px" }}>Rate AI Performance</div>
-            <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
-              {[["positive","👍","#10B981"],["needs_work","👎","#EF4444"]].map(([val, icon, color]) => (
-                <button key={val} onClick={() => setRating(val)} style={{
-                  flex: 1, padding: "12px", borderRadius: "10px", cursor: "pointer", fontSize: "20px",
-                  background: rating === val ? `${color}20` : t.surfaceHover,
-                  border: `2px solid ${rating === val ? color : t.border}`,
-                  transition: "all 0.15s",
-                }}>{icon}</button>
-              ))}
-            </div>
-
-            {/* Feedback */}
-            <div style={{ fontSize: "12px", fontWeight: "600", color: t.text, marginBottom: "8px" }}>
-              Feedback {rating === "needs_work" ? "(required)" : "(optional)"}
-            </div>
-            <textarea value={feedback} onChange={e => setFeedback(e.target.value)} rows={4}
-              placeholder={rating === "needs_work"
-                ? "What should the AI have done differently?"
-                : "Any notes about this response? (optional)"}
-              style={{ width: "100%", background: t.surfaceHover,
-                border: `1px solid ${rating === "needs_work" && !feedback.trim() ? "#F59E0B" : t.border}`,
-                borderRadius: "8px", color: t.text, fontSize: "12px", padding: "10px 12px",
-                fontFamily: "inherit", outline: "none", resize: "vertical", lineHeight: "1.5",
-                transition: "border-color 0.15s", boxSizing: "border-box" }}
-              onFocus={e => e.target.style.borderColor = accent}
-              onBlur={e => e.target.style.borderColor = (rating === "needs_work" && !feedback.trim()) ? "#F59E0B" : t.border}
-            />
-
-            <button
-              onClick={handleSubmit}
-              disabled={!rating || submitting || (rating === "needs_work" && !feedback.trim())}
-              style={{
-                width: "100%", marginTop: "12px", padding: "11px",
-                background: justSubmitted ? "#059669" : (!rating || (rating === "needs_work" && !feedback.trim())) ? t.border : accent,
-                border: "none", borderRadius: "8px", color: "#fff",
-                fontSize: "13px", fontWeight: "600",
-                cursor: (!rating || submitting || (rating === "needs_work" && !feedback.trim())) ? "default" : "pointer",
-                transition: "all 0.2s",
-              }}>
-              {justSubmitted ? "✓ Submitted — loading next…"
-                : submitting ? "Submitting…"
-                : pendingTickets.length > 1 ? "Submit & Next →"
-                : "Submit Evaluation"}
-            </button>
-
-            {rating === "needs_work" && !feedback.trim() && (
-              <p style={{ fontSize: "11px", color: "#F59E0B", marginTop: "6px", textAlign: "center" }}>
-                Please add feedback when marking as needs improvement.
-              </p>
-            )}
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-
+function metricLabel(value) {
+  if (value === null || value === undefined) return "N/A";
+  return `${Math.round(Number(value) * 100)}%`;
 }
 
+function formatDate(value) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function expectedSummary(evalCase) {
+  const parts = [];
+  if (evalCase.expected_decision) parts.push(`Decision: ${evalCase.expected_decision}`);
+  if (evalCase.expected_issue_type_name) parts.push(`Issue Type: ${evalCase.expected_issue_type_name}`);
+  if (evalCase.expected_sop_title) parts.push(`SOP: ${evalCase.expected_sop_title}`);
+  if (evalCase.expected_kb_title) parts.push(`KB: ${evalCase.expected_kb_title}`);
+  return parts.length ? parts.join(" ? ") : "No expectations configured yet.";
+}
+
+function actualSummary(result) {
+  const parts = [];
+  if (result.actual_decision) parts.push(`Decision: ${result.actual_decision}`);
+  if (result.actual_issue_type_name) parts.push(`Issue Type: ${result.actual_issue_type_name}`);
+  if (result.actual_sop_title) parts.push(`SOP: ${result.actual_sop_title}`);
+  if (result.actual_kb_title) parts.push(`KB: ${result.actual_kb_title}`);
+  return parts.length ? parts.join(" ? ") : "No actual output recorded.";
+}
+
+function textInputStyle(t) {
+  return {
+    width: "100%",
+    background: t.surfaceHover,
+    border: `1px solid ${t.border}`,
+    borderRadius: "12px",
+    color: t.text,
+    fontSize: "12.5px",
+    padding: "11px 12px",
+    outline: "none",
+    boxSizing: "border-box",
+  };
+}
+
+function selectStyle(t) {
+  return {
+    ...textInputStyle(t),
+    cursor: "pointer",
+  };
+}
+
+function metricCard({ label, value, hint, t, accent }) {
+  return (
+    <Card t={t} accent={accent} style={{ padding: "16px", minWidth: 0 }}>
+      <div style={{ fontSize: "11px", color: t.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>{label}</div>
+      <div style={{ fontSize: "24px", fontWeight: "700", color: t.text, letterSpacing: "-0.05em" }}>{value}</div>
+      {hint && <div style={{ marginTop: "8px", fontSize: "12px", color: t.textSub }}>{hint}</div>}
+    </Card>
+  );
+}
+
+export function Evaluations({ t, accent }) {
+  const clientId = getActiveClientId();
+  const [form, setForm] = useState(EMPTY_CASE);
+  const [submitting, setSubmitting] = useState(false);
+  const [runPending, setRunPending] = useState(false);
+  const [generateReply, setGenerateReply] = useState(true);
+  const [activeOnly, setActiveOnly] = useState(true);
+  const [selectedCaseIds, setSelectedCaseIds] = useState([]);
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [latestReport, setLatestReport] = useState(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const casesPath = clientId ? `/api/eval/cases?client_id=${clientId}&active_only=false` : null;
+  const runsPath = clientId ? `/api/eval/runs?client_id=${clientId}&limit=12` : null;
+  const issueTypesPath = clientId ? `/api/issue-types?client_id=${clientId}` : null;
+  const sopsPath = clientId ? `/api/sops?client_id=${clientId}` : null;
+  const kbPath = clientId ? `/api/knowledge?client_id=${clientId}` : null;
+
+  const { data: evalCases = [], loading: casesLoading, refetch: refetchCases } = useApi(casesPath, [], [clientId]);
+  const { data: evalRuns = [], loading: runsLoading, refetch: refetchRuns } = useApi(runsPath, [], [clientId]);
+  const { data: issueTypes = [] } = useApi(issueTypesPath, [], [clientId]);
+  const { data: sops = [] } = useApi(sopsPath, [], [clientId]);
+  const { data: knowledgeArticles = [] } = useApi(kbPath, [], [clientId]);
+
+  const selectedRunPath = clientId && selectedRunId ? `/api/eval/runs/${selectedRunId}?client_id=${clientId}` : null;
+  const { data: selectedRunReport, loading: selectedRunLoading } = useApi(selectedRunPath, null, [clientId, selectedRunId]);
+
+  useEffect(() => {
+    if (!selectedRunId && evalRuns?.[0]?.id) {
+      setSelectedRunId(evalRuns[0].id);
+    }
+  }, [evalRuns, selectedRunId]);
+
+  useEffect(() => {
+    if (selectedRunReport?.run?.id) {
+      setLatestReport(selectedRunReport);
+    }
+  }, [selectedRunReport]);
+
+  const activeCases = useMemo(() => (evalCases || []).filter((item) => item.active), [evalCases]);
+  const selectedCaseSet = useMemo(() => new Set(selectedCaseIds), [selectedCaseIds]);
+  const currentReport = latestReport?.run?.id === selectedRunId && latestReport?.results ? latestReport : selectedRunReport;
+  const metrics = currentReport?.run?.metrics || currentReport?.metrics || null;
+
+  function updateForm(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function resetMessages() {
+    setError("");
+    setSuccess("");
+  }
+
+  function toggleCase(caseId) {
+    setSelectedCaseIds((current) => current.includes(caseId)
+      ? current.filter((id) => id !== caseId)
+      : [...current, caseId]);
+  }
+
+  function toggleAllVisible() {
+    const targetIds = (activeOnly ? activeCases : evalCases).map((item) => item.id);
+    const allSelected = targetIds.length > 0 && targetIds.every((id) => selectedCaseSet.has(id));
+    setSelectedCaseIds(allSelected ? [] : targetIds);
+  }
+
+  async function handleCreateCase(event) {
+    event.preventDefault();
+    if (!clientId) return;
+    resetMessages();
+    setSubmitting(true);
+    try {
+      const payload = {
+        client_id: clientId,
+        ...form,
+        expected_issue_type_id: form.expected_issue_type_id || null,
+        expected_issue_type_name: form.expected_issue_type_name || null,
+        expected_decision: form.expected_decision || null,
+        expected_sop_id: form.expected_sop_id || null,
+        expected_sop_title: form.expected_sop_title || null,
+        expected_kb_id: form.expected_kb_id || null,
+        expected_kb_title: form.expected_kb_title || null,
+      };
+      await apiJson("/api/eval/cases", { method: "POST", body: payload });
+      setForm(EMPTY_CASE);
+      setSuccess("Evaluation case added.");
+      await refetchCases();
+    } catch (nextError) {
+      setError(nextError.message || "Failed to create evaluation case.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRun() {
+    if (!clientId) return;
+    resetMessages();
+    setRunPending(true);
+    try {
+      const report = await apiJson("/api/eval/run", {
+        method: "POST",
+        body: {
+          client_id: clientId,
+          generate_reply: generateReply,
+          active_only: activeOnly,
+          case_ids: selectedCaseIds.length ? selectedCaseIds : undefined,
+        },
+      });
+      setLatestReport(report);
+      if (report?.run?.id) {
+        setSelectedRunId(report.run.id);
+      }
+      await refetchRuns();
+      setSuccess(`Evaluation run completed for ${report?.metrics?.total_cases || 0} case(s).`);
+    } catch (nextError) {
+      setError(nextError.message || "Failed to run evaluation.");
+    } finally {
+      setRunPending(false);
+    }
+  }
+
+  const visibleCases = activeOnly ? activeCases : evalCases;
+
+  return (
+    <div style={{ display: "grid", gap: "22px" }}>
+      <SectionHeader
+        title="Evaluations"
+        sub="Run your stored regression cases against the full preview pipeline, track accuracy, and inspect case-by-case misses without touching the live message flow."
+        t={t}
+        action={
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "999px", background: t.surfaceHover, border: `1px solid ${t.border}` }}>
+              <span style={{ fontSize: "11px", color: t.textSub }}>Generate replies</span>
+              <Toggle value={generateReply} onChange={setGenerateReply} accent={accent} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "999px", background: t.surfaceHover, border: `1px solid ${t.border}` }}>
+              <span style={{ fontSize: "11px", color: t.textSub }}>Active cases only</span>
+              <Toggle value={activeOnly} onChange={setActiveOnly} accent={accent} />
+            </div>
+            <button type="button" onClick={handleRun} disabled={runPending || casesLoading || visibleCases.length === 0} style={{ background: accent, color: "#fff", border: "none", borderRadius: "12px", padding: "11px 16px", fontSize: "12.5px", fontWeight: "700", cursor: runPending ? "default" : "pointer", boxShadow: `0 18px 32px ${accent}22` }}>
+              {runPending ? "Running?" : "Run Evaluation"}
+            </button>
+          </div>
+        }
+      />
+
+      {(error || success) && (
+        <Card t={t} accent={accent} style={{ padding: "14px 16px", borderColor: error ? "#FB7185" : `${accent}28`, background: error ? "linear-gradient(180deg, rgba(251,113,133,0.12) 0%, rgba(251,113,133,0.06) 100%)" : undefined }}>
+          <div style={{ fontSize: "12.5px", color: error ? "#FCA5A5" : t.text }}>{error || success}</div>
+        </Card>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "14px" }}>
+        {metricCard({ label: "Cases in scope", value: String(visibleCases.length), hint: activeOnly ? "Active cases selected for the next run." : "All stored cases are visible.", t, accent })}
+        {metricCard({ label: "Pass rate", value: metrics ? metricLabel(metrics.pass_rate) : "?", hint: metrics ? `${metrics.passed_cases}/${metrics.total_cases} cases passed.` : "Run an evaluation to score the current pipeline.", t, accent })}
+        {metricCard({ label: "Classification", value: metrics ? metricLabel(metrics.classification_accuracy) : "?", hint: "Expected issue type versus actual matched issue type.", t, accent })}
+        {metricCard({ label: "Decision", value: metrics ? metricLabel(metrics.decision_accuracy) : "?", hint: "Answer versus clarify versus escalate accuracy.", t, accent })}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "22px", alignItems: "start" }}>
+        <Card t={t} accent={accent} style={{ padding: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "16px" }}>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: t.text }}>Create Evaluation Case</div>
+              <div style={{ fontSize: "12px", color: t.textSub, marginTop: "4px" }}>Store a deterministic regression case you can rerun after prompt, retrieval, or policy changes.</div>
+            </div>
+            <Tag color={accent}>Dataset</Tag>
+          </div>
+          <form onSubmit={handleCreateCase} style={{ display: "grid", gap: "12px" }}>
+            <input value={form.name} onChange={(event) => updateForm("name", event.target.value)} placeholder="Case name" style={textInputStyle(t)} />
+            <textarea value={form.input_message} onChange={(event) => updateForm("input_message", event.target.value)} rows={4} placeholder="Input message" style={{ ...textInputStyle(t), resize: "vertical" }} />
+            <input value={form.input_subject} onChange={(event) => updateForm("input_subject", event.target.value)} placeholder="Email subject (optional)" style={textInputStyle(t)} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
+              <select value={form.input_channel} onChange={(event) => updateForm("input_channel", event.target.value)} style={selectStyle(t)}>
+                <option value="chat">Chat</option>
+                <option value="email">Email</option>
+                <option value="whatsapp">WhatsApp</option>
+              </select>
+              <input value={form.customer_name} onChange={(event) => updateForm("customer_name", event.target.value)} placeholder="Customer name" style={textInputStyle(t)} />
+              <input value={form.customer_email} onChange={(event) => updateForm("customer_email", event.target.value)} placeholder="Customer email" style={textInputStyle(t)} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+              <select value={form.expected_decision} onChange={(event) => updateForm("expected_decision", event.target.value)} style={selectStyle(t)}>
+                <option value="">Expected decision</option>
+                <option value="answer">Answer</option>
+                <option value="clarify">Clarify</option>
+                <option value="escalate">Escalate</option>
+              </select>
+              <select value={form.expected_issue_type_id} onChange={(event) => {
+                const selected = issueTypes.find((item) => item.id === event.target.value);
+                updateForm("expected_issue_type_id", event.target.value);
+                updateForm("expected_issue_type_name", selected?.name || "");
+              }} style={selectStyle(t)}>
+                <option value="">Expected issue type</option>
+                {issueTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <select value={form.expected_sop_id} onChange={(event) => {
+                const selected = sops.find((item) => item.id === event.target.value);
+                updateForm("expected_sop_id", event.target.value);
+                updateForm("expected_sop_title", selected?.title || selected?.name || "");
+              }} style={selectStyle(t)}>
+                <option value="">Expected SOP</option>
+                {sops.map((item) => <option key={item.id} value={item.id}>{item.title || item.name}</option>)}
+              </select>
+              <select value={form.expected_kb_id} onChange={(event) => {
+                const selected = knowledgeArticles.find((item) => item.id === event.target.value);
+                updateForm("expected_kb_id", event.target.value);
+                updateForm("expected_kb_title", selected?.title || "");
+              }} style={selectStyle(t)}>
+                <option value="">Expected KB article</option>
+                {knowledgeArticles.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+            </div>
+            <textarea value={form.notes} onChange={(event) => updateForm("notes", event.target.value)} rows={3} placeholder="Notes for this regression case" style={{ ...textInputStyle(t), resize: "vertical" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "12px", color: t.textSub }}>Active</span>
+                <Toggle value={form.active} onChange={(value) => updateForm("active", value)} accent={accent} />
+              </div>
+              <button type="submit" disabled={submitting || !form.input_message.trim()} style={{ background: accent, border: "none", borderRadius: "12px", color: "#fff", padding: "11px 16px", fontSize: "12.5px", fontWeight: "700", cursor: submitting ? "default" : "pointer" }}>
+                {submitting ? "Saving?" : "Add Case"}
+              </button>
+            </div>
+          </form>
+        </Card>
+
+        <Card t={t} accent={accent} style={{ padding: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "16px" }}>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: t.text }}>Recent Runs</div>
+              <div style={{ fontSize: "12px", color: t.textSub, marginTop: "4px" }}>Stored reports you can reopen after prompt, retrieval, or policy changes.</div>
+            </div>
+            <button type="button" onClick={() => refetchRuns()} style={{ background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "10px", color: t.textSub, padding: "8px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>Refresh</button>
+          </div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {runsLoading && <div style={{ fontSize: "12px", color: t.textMuted }}>Loading runs?</div>}
+            {!runsLoading && evalRuns.length === 0 && <div style={{ fontSize: "12px", color: t.textMuted }}>No evaluation runs yet.</div>}
+            {evalRuns.map((run) => {
+              const selected = selectedRunId === run.id;
+              return (
+                <button key={run.id} type="button" onClick={() => setSelectedRunId(run.id)} style={{ textAlign: "left", background: selected ? `${accent}14` : t.surfaceHover, border: `1px solid ${selected ? accent : t.border}`, borderRadius: "14px", padding: "12px 14px", cursor: "pointer", color: t.text }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                    <div style={{ fontSize: "12px", fontWeight: "700" }}>{formatDate(run.created_at)}</div>
+                    <Tag color={run.status === "failed" ? "#FB7185" : run.status === "running" ? "#F59E0B" : "#34D399"}>{run.status}</Tag>
+                  </div>
+                  <div style={{ fontSize: "12px", color: t.textSub, marginTop: "6px" }}>
+                    {run.passed_cases || 0}/{run.total_cases || 0} passed ? {metricLabel(run.metrics?.pass_rate)} pass rate
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: "22px", alignItems: "start" }}>
+        <Card t={t} accent={accent} style={{ padding: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "16px" }}>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: t.text }}>Evaluation Cases</div>
+              <div style={{ fontSize: "12px", color: t.textSub, marginTop: "4px" }}>Select specific cases or run the full active dataset.</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <button type="button" onClick={toggleAllVisible} style={{ background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "10px", color: t.textSub, padding: "8px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
+                {visibleCases.length > 0 && visibleCases.every((item) => selectedCaseSet.has(item.id)) ? "Clear selection" : "Select visible"}
+              </button>
+              <button type="button" onClick={() => refetchCases()} style={{ background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "10px", color: t.textSub, padding: "8px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>Refresh</button>
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: "10px", maxHeight: "560px", overflowY: "auto", paddingRight: "4px" }}>
+            {casesLoading && <div style={{ fontSize: "12px", color: t.textMuted }}>Loading cases?</div>}
+            {!casesLoading && visibleCases.length === 0 && <div style={{ fontSize: "12px", color: t.textMuted }}>No evaluation cases yet.</div>}
+            {visibleCases.map((evalCase) => {
+              const selected = selectedCaseSet.has(evalCase.id);
+              return (
+                <div key={evalCase.id} style={{ background: selected ? `${accent}12` : t.surfaceHover, border: `1px solid ${selected ? accent : t.border}`, borderRadius: "14px", padding: "14px" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                    <input type="checkbox" checked={selected} onChange={() => toggleCase(evalCase.id)} style={{ marginTop: "3px" }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: t.text }}>{evalCase.name}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <Pill t={t} accent={accent} active>{evalCase.input_channel}</Pill>
+                          {evalCase.active ? <Tag color="#34D399">active</Tag> : <Tag color="#94A3B8">inactive</Tag>}
+                        </div>
+                      </div>
+                      <div style={{ marginTop: "8px", fontSize: "12px", color: t.textSub, lineHeight: "1.6" }}>{evalCase.input_message}</div>
+                      <div style={{ marginTop: "10px", fontSize: "11px", color: t.textMuted }}>{expectedSummary(evalCase)}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card t={t} accent={accent} style={{ padding: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "16px" }}>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: t.text }}>Run Report</div>
+              <div style={{ fontSize: "12px", color: t.textSub, marginTop: "4px" }}>
+                {selectedRunId ? "Inspect the latest selected run case-by-case." : "Run the dataset to generate a report."}
+              </div>
+            </div>
+            {selectedRunLoading && <Tag color="#F59E0B">loading</Tag>}
+          </div>
+
+          {!currentReport && <div style={{ fontSize: "12px", color: t.textMuted }}>No run selected yet.</div>}
+
+          {currentReport && (
+            <div style={{ display: "grid", gap: "14px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
+                {metricCard({ label: "Pass rate", value: metricLabel(metrics?.pass_rate), hint: metrics ? `${metrics.passed_cases}/${metrics.total_cases} passed` : "", t, accent })}
+                {metricCard({ label: "SOP usage", value: metricLabel(metrics?.sop_usage_accuracy), hint: "Expected SOP selected when configured.", t, accent })}
+                {metricCard({ label: "KB usage", value: metricLabel(metrics?.kb_usage_accuracy), hint: "Expected KB article selected when configured.", t, accent })}
+              </div>
+
+              <div style={{ display: "grid", gap: "10px", maxHeight: "520px", overflowY: "auto", paddingRight: "4px" }}>
+                {(currentReport.results || []).map((result) => {
+                  const evalCase = result.eval_case || result.preview?.eval_case || null;
+                  return (
+                    <div key={result.id || result.eval_case_id} style={{ background: t.surfaceHover, border: `1px solid ${result.passed ? "#34D39955" : t.border}`, borderRadius: "14px", padding: "14px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: t.text }}>{evalCase?.name || `Case ${result.eval_case_id}`}</div>
+                        <Tag color={result.passed ? "#34D399" : "#FB7185"}>{result.passed ? "pass" : "miss"}</Tag>
+                      </div>
+                      {evalCase?.input_message && <div style={{ marginTop: "8px", fontSize: "12px", color: t.textSub, lineHeight: "1.6" }}>{evalCase.input_message}</div>}
+                      <div style={{ marginTop: "10px", fontSize: "11px", color: t.textMuted }}>Expected: {expectedSummary(evalCase || {})}</div>
+                      <div style={{ marginTop: "6px", fontSize: "11px", color: t.textMuted }}>Actual: {actualSummary(result)}</div>
+                      {result.actual_clarification_question && <div style={{ marginTop: "8px", fontSize: "11.5px", color: t.textSub }}>Clarification: {result.actual_clarification_question}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
