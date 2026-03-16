@@ -17,6 +17,52 @@ function formatDate(value) {
   }
 }
 
+function DiagnosticsPill({ label, value, tone = "default", t, accent }) {
+  const colors = {
+    default: { border: tone === "default" ? `${accent}2f` : t.border, background: `${accent}12`, color: accent },
+    warn: { border: "#F59E0B44", background: "#F59E0B14", color: "#F59E0B" },
+    danger: { border: "#FB718544", background: "#FB718514", color: "#FB7185" },
+    ok: { border: "#10B98144", background: "#10B98114", color: "#10B981" },
+  }[tone] || { border: t.border, background: t.surfaceHover, color: t.textSub };
+
+  return (
+    <span style={{ borderRadius: "999px", border: `1px solid ${colors.border}`, background: colors.background, color: colors.color, fontSize: "11px", fontWeight: "700", padding: "4px 9px" }}>
+      {label}: {value}
+    </span>
+  );
+}
+
+function GuardrailSummary({ diagnostics, t, accent }) {
+  if (!diagnostics?.guardrails && !diagnostics?.aiMeta && !diagnostics?.sourceSelection) return null;
+
+  const guardrails = diagnostics.guardrails || {};
+  const reasons = Array.isArray(guardrails.reasons) ? guardrails.reasons : Array.isArray(diagnostics.aiMeta?.policy_reasons) ? diagnostics.aiMeta.policy_reasons : [];
+  const requiredFields = guardrails.required_fields_missing || [];
+  const blockedActions = guardrails.blocked_actions || [];
+  const allowedTools = guardrails.allowed_tools || [];
+  const policyMode = diagnostics.sourceSelection?.mode || diagnostics.aiMeta?.policy_mode || null;
+
+  return (
+    <Card t={t} style={{ padding: "16px" }}>
+      <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
+        Guardrails
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+        {policyMode && <DiagnosticsPill label="Mode" value={policyMode} tone={policyMode === "escalate" ? "danger" : policyMode === "clarify" ? "warn" : "ok"} t={t} accent={accent} />}
+        <DiagnosticsPill label="Escalate" value={guardrails.must_escalate ? "Yes" : "No"} tone={guardrails.must_escalate ? "danger" : "ok"} t={t} accent={accent} />
+        <DiagnosticsPill label="Clarify" value={guardrails.must_clarify ? "Yes" : "No"} tone={guardrails.must_clarify ? "warn" : "ok"} t={t} accent={accent} />
+      </div>
+      <div style={{ display: "grid", gap: "8px", fontSize: "12px", color: t.textSub, lineHeight: "1.7" }}>
+        <div><strong style={{ color: t.text }}>Reasons:</strong> {reasons.length ? reasons.join(", ") : "None"}</div>
+        <div><strong style={{ color: t.text }}>Missing fields:</strong> {requiredFields.length ? requiredFields.join(", ") : "None"}</div>
+        <div><strong style={{ color: t.text }}>Blocked actions:</strong> {blockedActions.length ? blockedActions.join(", ") : "None"}</div>
+        <div><strong style={{ color: t.text }}>Allowed tools:</strong> {allowedTools.length ? allowedTools.join(", ") : "No tools exposed"}</div>
+        {guardrails.clarification_question && <div><strong style={{ color: t.text }}>Guardrail clarification:</strong> {guardrails.clarification_question}</div>}
+      </div>
+    </Card>
+  );
+}
+
 function MessageBubble({ message, t, accent }) {
   const fromCustomer = message.sender_type === "customer";
 
@@ -67,6 +113,7 @@ export function AITestPanel({ t, accent }) {
   const [subject, setSubject] = useState("Question about a recent order");
   const [draftMessage, setDraftMessage] = useState("");
   const [lastReply, setLastReply] = useState("");
+  const [lastDiagnostics, setLastDiagnostics] = useState(null);
   const [pendingAgentMessageId, setPendingAgentMessageId] = useState("");
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) || null;
@@ -98,6 +145,7 @@ export function AITestPanel({ t, accent }) {
     if (!sessionId) {
       setMessages([]);
       setLastReply("");
+      setLastDiagnostics(null);
       setPendingAgentMessageId("");
       return;
     }
@@ -113,6 +161,7 @@ export function AITestPanel({ t, accent }) {
       }
       setMessages(data);
       setPendingAgentMessageId("");
+      setLastDiagnostics(null);
       const latestBot = [...data].reverse().find((item) => item.sender_type === "bot");
       setLastReply(latestBot?.content || "");
     } catch (nextError) {
@@ -129,6 +178,7 @@ export function AITestPanel({ t, accent }) {
     setActiveSessionId("");
     setMessages([]);
     setLastReply("");
+    setLastDiagnostics(null);
     loadSessions();
   }, [clientId]);
 
@@ -190,10 +240,21 @@ export function AITestPanel({ t, accent }) {
       setMessages(payload.messages || []);
       setPendingAgentMessageId("");
       setLastReply(payload.reply || "");
+      setLastDiagnostics({
+        guardrails: payload.guardrails || null,
+        sourceSelection: payload.source_selection || null,
+        aiMeta: payload.ai_meta || null,
+      });
+      setLastDiagnostics({
+        guardrails: payload.guardrails || null,
+        sourceSelection: payload.source_selection || null,
+        aiMeta: payload.ai_meta || null,
+      });
       loadSessions(activeSession.id);
     } catch (nextError) {
       setMessages((current) => current.filter((message) => message.id !== optimisticCustomerId && message.id !== optimisticAgentId));
       setPendingAgentMessageId("");
+      setLastDiagnostics(null);
       setDraftMessage(outgoingMessage);
       setError(nextError.message || "Failed to send test message.");
     } finally {
@@ -466,6 +527,10 @@ export function AITestPanel({ t, accent }) {
                   />
                 )}
               </div>
+
+              <GuardrailSummary diagnostics={lastDiagnostics} t={t} accent={accent} />
+
+              <GuardrailSummary diagnostics={lastDiagnostics} t={t} accent={accent} />
 
               <div style={{ display: "grid", gap: "10px" }}>
                 <textarea

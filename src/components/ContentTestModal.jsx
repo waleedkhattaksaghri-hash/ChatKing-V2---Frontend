@@ -29,6 +29,7 @@ function summarizePreview(preview) {
     selectedMemoryTitle: selectedMemory?.title || null,
     telemetry: preview?.telemetry || null,
     sourceSelection: preview?.source_selection || null,
+    guardrails: preview?.evidence_bundle?.guardrails || preview?.guardrails || null,
   };
 }
 
@@ -100,7 +101,30 @@ function buildFailureReasons({ itemType, diagnostics, primarySummary, forcedSumm
   return reasons;
 }
 
+function GuardrailPanel({ summary, t, accent }) {
+  const guardrails = summary?.guardrails;
+  const reasons = Array.isArray(guardrails?.reasons) ? guardrails.reasons : Array.isArray(summary?.telemetry?.policy_reasons) ? summary.telemetry.policy_reasons : [];
+  if (!guardrails && !summary?.telemetry?.policy_mode) return null;
+
+  return (
+    <Card t={t} style={{ padding: "16px" }}>
+      <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
+        Guardrails
+      </div>
+      <div style={{ display: "grid", gap: "8px", fontSize: "12px", color: t.textSub, lineHeight: "1.7" }}>
+        <div><strong style={{ color: t.text }}>Policy mode:</strong> {summary?.telemetry?.policy_mode || summary?.mode || "n/a"}</div>
+        <div><strong style={{ color: t.text }}>Reasons:</strong> {reasons.length ? reasons.join(", ") : "None"}</div>
+        <div><strong style={{ color: t.text }}>Missing fields:</strong> {guardrails?.required_fields_missing?.length ? guardrails.required_fields_missing.join(", ") : "None"}</div>
+        <div><strong style={{ color: t.text }}>Blocked actions:</strong> {guardrails?.blocked_actions?.length ? guardrails.blocked_actions.join(", ") : "None"}</div>
+        <div><strong style={{ color: t.text }}>Allowed tools:</strong> {guardrails?.allowed_tools?.length ? guardrails.allowed_tools.join(", ") : "No tools exposed"}</div>
+        {guardrails?.clarification_question && <div><strong style={{ color: t.text }}>Guardrail clarification:</strong> {guardrails.clarification_question}</div>}
+      </div>
+    </Card>
+  );
+}
+
 function ResultPanel({ heading, summary, diagnostics, testedItem, t, accent }) {
+
   return (
     <>
       <Card t={t} style={{ padding: "16px" }}>
@@ -143,6 +167,8 @@ function ResultPanel({ heading, summary, diagnostics, testedItem, t, accent }) {
           {summary?.reply || "No reply returned."}
         </div>
       </Card>
+
+      <GuardrailPanel summary={summary} t={t} accent={accent} />
 
       <Card t={t} style={{ padding: "16px" }}>
         <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
@@ -299,4 +325,5 @@ export function ContentTestModal({ title, endpoint, itemType, itemLabel, t, acce
       </Card>
     </div>
   );
-}
+}
+
