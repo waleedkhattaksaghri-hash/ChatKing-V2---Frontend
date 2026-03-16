@@ -39,6 +39,89 @@ function ContainmentBar({ current, target, accent, t, steps: stepsProp }) {
     </div>
   );
 }
+
+function RetrievalMetricCard({ label, count, rate, color, t }) {
+  return (
+    <Card t={t} style={{ padding: "16px 18px" }}>
+      <div style={{ fontSize: "11px", color: t.textSub, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+        <span style={{ fontSize: "24px", fontWeight: "700", color, fontFamily: "'DM Mono', monospace" }}>
+          {count ?? 0}
+        </span>
+        <span style={{ fontSize: "12px", color: t.textMuted }}>
+          {rate ?? 0}%
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+function RankedMetricList({ title, items, accent, t, emptyLabel = "No data yet" }) {
+  return (
+    <Card t={t} style={{ overflow: "hidden" }}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontSize: "13px", fontWeight: "700", color: t.text }}>
+        {title}
+      </div>
+      {!items?.length ? (
+        <div style={{ padding: "24px 16px", fontSize: "12px", color: t.textMuted }}>
+          {emptyLabel}
+        </div>
+      ) : items.map((item, index) => (
+        <div key={`${item.label || item.issue_type}-${index}`} style={{
+          padding: "12px 16px",
+          borderBottom: index < items.length - 1 ? `1px solid ${t.borderLight}` : "none",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "6px" }}>
+            <span style={{ fontSize: "12px", fontWeight: "600", color: t.text }}>
+              {item.label || item.issue_type}
+            </span>
+            <span style={{ fontSize: "12px", fontFamily: "'DM Mono', monospace", color: accent }}>
+              {item.count} · {item.rate}%
+            </span>
+          </div>
+          <div style={{ height: "6px", borderRadius: "999px", background: t.border, overflow: "hidden" }}>
+            <div style={{ width: `${Math.min(100, item.rate || 0)}%`, height: "100%", background: `linear-gradient(90deg, ${accent}, ${accent}88)` }} />
+          </div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function IssueMixTable({ items, t, accent }) {
+  return (
+    <Card t={t} style={{ overflow: "hidden", marginBottom: "20px" }}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontSize: "13px", fontWeight: "700", color: t.text }}>
+        Issue Type Outcome Mix
+      </div>
+      {!items?.length ? (
+        <div style={{ padding: "24px 16px", fontSize: "12px", color: t.textMuted }}>
+          Retrieval mix appears here once retrieval analytics data has been recorded.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 70px 80px 80px 80px", padding: "8px 16px",
+            fontSize: "10px", fontWeight: "700", color: t.textMuted, textTransform: "uppercase", letterSpacing: "0.07em",
+            borderBottom: `1px solid ${t.border}` }}>
+            <span>Issue Type</span><span>Total</span><span>Answer</span><span>Clarify</span><span>Escalate</span>
+          </div>
+          {items.map((item, i) => (
+            <div key={`${item.issue_type}-${i}`} style={{ display: "grid", gridTemplateColumns: "2fr 70px 80px 80px 80px", padding: "11px 16px", borderBottom: `1px solid ${t.borderLight}`, alignItems: "center" }}>
+              <div style={{ fontSize: "13px", color: t.text, fontWeight: "500" }}>{item.issue_type}</div>
+              <div style={{ fontSize: "12px", color: t.text, fontFamily: "'DM Mono', monospace" }}>{item.total}</div>
+              <div style={{ fontSize: "12px", color: "#10B981", fontFamily: "'DM Mono', monospace" }}>{item.answer_rate}%</div>
+              <div style={{ fontSize: "12px", color: accent, fontFamily: "'DM Mono', monospace" }}>{item.clarify_rate}%</div>
+              <div style={{ fontSize: "12px", color: "#F59E0B", fontFamily: "'DM Mono', monospace" }}>{item.escalate_rate}%</div>
+            </div>
+          ))}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function TakeActionModal({ opp, t, accent, onClose, onDone }) {
   const clientId = getActiveClientId();
   // "kb" opportunities default to KB tab; "sop" to SOP tab; "escalation" lets user pick
@@ -325,6 +408,13 @@ export function Insights({ t, accent }) {
   const intents    = rawIntents || [];
   const kbArticles = rawKB      || [];
   const publishedKB = kbArticles.filter(a => a.status === "published").length;
+  const retrievalQuality = aPrimary?.retrieval_quality || {};
+  const retrievalMetricCards = [
+    { label: "Policy Overrides", ...retrievalQuality.policy_override_rate, color: "#F59E0B" },
+    { label: "Memory Reinforced", ...retrievalQuality.memory_reinforced, color: "#8B5CF6" },
+    { label: "Fallback Retrieval", ...retrievalQuality.fallback_retrieval, color: "#06B6D4" },
+    { label: "Missed SOP Signal", ...retrievalQuality.missed_sop_indicator, color: "#FB7185" },
+  ];
 
   // Build real opportunities from actual data
   const allOpps = [];
@@ -553,6 +643,73 @@ export function Insights({ t, accent }) {
             );
           })}
         </Card>
+      )}
+
+      {(retrievalQuality.source_win_rate?.length || retrievalQuality.top_issue_types_mix?.length) && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+            {retrievalMetricCards.map((item) => (
+              <RetrievalMetricCard
+                key={item.label}
+                label={item.label}
+                count={item.count}
+                rate={item.rate}
+                color={item.color}
+                t={t}
+              />
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: "20px", marginBottom: "20px" }}>
+            <RankedMetricList
+              title="Source Win Rate"
+              items={retrievalQuality.source_win_rate}
+              accent={accent}
+              t={t}
+              emptyLabel="Source mix will appear after retrieval analytics are recorded."
+            />
+            <RankedMetricList
+              title="Retrieval Confidence Distribution"
+              items={retrievalQuality.retrieval_confidence_distribution}
+              accent="#10B981"
+              t={t}
+            />
+          </div>
+
+          <IssueMixTable items={retrievalQuality.top_issue_types_mix} t={t} accent={accent} />
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+            <RankedMetricList
+              title="Selected SOP Frequency"
+              items={retrievalQuality.selected_sop_frequency}
+              accent="#8B5CF6"
+              t={t}
+              emptyLabel="No SOP selections recorded in this range."
+            />
+            <RankedMetricList
+              title="Selected KB Frequency"
+              items={retrievalQuality.selected_kb_frequency}
+              accent="#06B6D4"
+              t={t}
+              emptyLabel="No KB selections recorded in this range."
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+            <RankedMetricList
+              title="Clarify Rate by Issue Type"
+              items={retrievalQuality.clarify_rate_by_issue_type}
+              accent={accent}
+              t={t}
+            />
+            <RankedMetricList
+              title="Escalate Rate by Issue Type"
+              items={retrievalQuality.escalate_rate_by_issue_type}
+              accent="#F59E0B"
+              t={t}
+            />
+          </div>
+        </>
       )}
 
       {/* Escalation Reasons */}
