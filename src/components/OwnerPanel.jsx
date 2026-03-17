@@ -3,6 +3,21 @@ import { apiJson } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Card, Pill, SectionHeader, Toggle } from "./ui";
 
+const ROLLOUT_MODES = [
+  ["sandbox", "Sandbox"],
+  ["pilot", "Pilot"],
+  ["limited_production", "Limited Production"],
+  ["full_production", "Full Production"],
+];
+
+const PROTECTION_FIELDS = [
+  ["request_ceiling_per_hour", "Request Ceiling / Hour"],
+  ["burst_ceiling_per_minute", "Burst Ceiling / Minute"],
+  ["ai_cost_alert_threshold_usd", "AI Cost Alert Threshold (USD)"],
+  ["fallback_spike_threshold_pct", "Fallback Spike Threshold (%)"],
+  ["queue_backlog_warning_threshold", "Queue Backlog Warning"],
+];
+
 const ENTITLEMENT_GROUPS = [
   {
     key: "pages",
@@ -76,10 +91,16 @@ function setNestedEntitlement(entitlements, groupKey, itemKey, value) {
   return next;
 }
 
+function cloneProtections(protections = {}) {
+  return JSON.parse(JSON.stringify(protections || {}));
+}
+
 export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id || null);
   const [draftEntitlements, setDraftEntitlements] = useState(null);
+  const [draftRolloutMode, setDraftRolloutMode] = useState(activeClient?.rollout_mode || "full_production");
+  const [draftProtections, setDraftProtections] = useState(activeClient?.protections || {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
@@ -97,6 +118,8 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
   );
 
   const effectiveEntitlements = draftEntitlements || selectedClient?.entitlements || null;
+  const effectiveRolloutMode = draftRolloutMode || selectedClient?.rollout_mode || "full_production";
+  const effectiveProtections = draftProtections || selectedClient?.protections || {};
 
   async function handleSave() {
     if (!selectedClient) return;
@@ -109,11 +132,15 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
         method: "PUT",
         body: {
           entitlements: effectiveEntitlements,
+          rollout_mode: effectiveRolloutMode,
+          protections: effectiveProtections,
         },
       });
 
       setDraftEntitlements(payload.entitlements);
-      setSavedMessage("Entitlements updated.");
+      setDraftRolloutMode(payload.rollout_mode || "full_production");
+      setDraftProtections(payload.protections || {});
+      setSavedMessage("Client access and rollout controls updated.");
       setRefreshTick((current) => current + 1);
       await Promise.all([refetch(), onClientsChanged?.()]);
     } catch (saveError) {
@@ -170,6 +197,8 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                     onClick={() => {
                       setSelectedClientId(client.id);
                       setDraftEntitlements(cloneEntitlements(client.entitlements));
+                      setDraftRolloutMode(client.rollout_mode || "full_production");
+                      setDraftProtections(cloneProtections(client.protections));
                       setError("");
                       setSavedMessage("");
                     }}
@@ -212,6 +241,9 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <Pill color="#60A5FA">Client {selectedClient.id}</Pill>
                   <Pill color="#34D399">{selectedClient.plan || "starter"}</Pill>
+                  <Pill color={effectiveRolloutMode === "sandbox" ? "#F59E0B" : effectiveRolloutMode === "pilot" ? "#60A5FA" : effectiveRolloutMode === "limited_production" ? "#8B5CF6" : "#10B981"}>
+                    {effectiveRolloutMode.replace(/_/g, " ")}
+                  </Pill>
                 </div>
               </div>
 
@@ -219,6 +251,77 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
               {savedMessage ? <div style={{ color: "#34D399", fontSize: "12px", marginBottom: "12px" }}>{savedMessage}</div> : null}
 
               <div style={{ display: "grid", gap: "14px" }}>
+                <Card t={t} style={{ padding: "16px 18px", background: t.surfaceHover }}>
+                  <div style={{ fontSize: "13px", fontWeight: "700", color: t.text, marginBottom: "12px" }}>Rollout and Protections</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <label style={{ fontSize: "12px", color: t.textSub, fontWeight: "700" }}>Rollout Mode</label>
+                      <select
+                        value={effectiveRolloutMode}
+                        onChange={(event) => {
+                          setDraftRolloutMode(event.target.value);
+                          setSavedMessage("");
+                        }}
+                        style={{
+                          border: `1px solid ${t.border}`,
+                          borderRadius: "10px",
+                          background: t.surface,
+                          color: t.text,
+                          padding: "11px 12px",
+                          fontSize: "12px",
+                          outline: "none",
+                        }}
+                      >
+                        {ROLLOUT_MODES.map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ padding: "12px 14px", borderRadius: "12px", border: `1px solid ${t.border}`, background: t.surface }}>
+                      <div style={{ fontSize: "12px", fontWeight: "700", color: t.text, marginBottom: "6px" }}>Mode behavior</div>
+                      <div style={{ fontSize: "11px", color: t.textMuted, lineHeight: 1.6 }}>
+                        {effectiveRolloutMode === "sandbox"
+                          ? "Sandbox mode disables live webhook ingress and keeps this workspace in validation-only operation."
+                          : effectiveRolloutMode === "pilot"
+                            ? "Pilot mode keeps live traffic enabled with tighter ceilings and lower alert thresholds."
+                            : effectiveRolloutMode === "limited_production"
+                              ? "Limited production allows live traffic with moderate safeguards before full rollout."
+                              : "Full production keeps live ingress enabled with the most permissive default ceilings."}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+                    {PROTECTION_FIELDS.map(([fieldKey, label]) => (
+                      <div key={fieldKey} style={{ display: "grid", gap: "8px" }}>
+                        <label style={{ fontSize: "12px", color: t.textSub, fontWeight: "700" }}>{label}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={effectiveProtections?.[fieldKey] ?? ""}
+                          onChange={(event) => {
+                            const nextValue = event.target.value === "" ? "" : Number(event.target.value);
+                            setDraftProtections((current) => ({
+                              ...(current || selectedClient.protections || {}),
+                              [fieldKey]: nextValue,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          style={{
+                            border: `1px solid ${t.border}`,
+                            borderRadius: "10px",
+                            background: t.surface,
+                            color: t.text,
+                            padding: "11px 12px",
+                            fontSize: "12px",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
                 {ENTITLEMENT_GROUPS.map((group) => (
                   <Card key={group.key} t={t} style={{ padding: "16px 18px", background: t.surfaceHover }}>
                     <div style={{ fontSize: "13px", fontWeight: "700", color: t.text, marginBottom: "12px" }}>{group.label}</div>
@@ -264,6 +367,8 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                   type="button"
                   onClick={() => {
                     setDraftEntitlements(cloneEntitlements(selectedClient.entitlements));
+                    setDraftRolloutMode(selectedClient.rollout_mode || "full_production");
+                    setDraftProtections(cloneProtections(selectedClient.protections));
                     setSavedMessage("");
                     setError("");
                   }}

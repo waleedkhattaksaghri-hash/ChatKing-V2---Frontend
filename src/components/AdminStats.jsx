@@ -120,6 +120,9 @@ export function AdminStats({ t, accent }) {
   const jobMetrics = metrics.jobs || {};
   const queue = data?.jobs || {};
   const readiness = data?.readiness || {};
+  const protections = data?.protections || {};
+  const ingressRuntime = protections?.ingress_runtime || {};
+  const protectionIndicators = protections?.indicators || {};
 
   const requestRouteRows = useMemo(() => {
     return Object.entries(requestMetrics.byRoute || {})
@@ -237,6 +240,55 @@ export function AdminStats({ t, accent }) {
           accent={accent}
           emptyText="Workspace go-live readiness appears here for the active client."
         />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "18px" }}>
+        <Card t={t} style={{ padding: "18px 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", marginBottom: "12px" }}>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: t.text }}>Client Protections</div>
+            <Tag color={protections.rollout_mode === "sandbox" ? "#F59E0B" : protections.live_ingress_enabled === false ? "#FB7185" : "#34D399"}>
+              {(protections.rollout_mode || "full_production").replace(/_/g, " ")}
+            </Tag>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+            <StatCard title="Req / Hour" value={protections.protections?.request_ceiling_per_hour || 0} sub="Configured hourly ceiling for live ingress." color={accent} t={t} />
+            <StatCard title="Burst / Minute" value={protections.protections?.burst_ceiling_per_minute || 0} sub="Configured short-window burst control." color="#06B6D4" t={t} />
+          </div>
+          <KeyValueList
+            title="Protection Indicators"
+            items={Object.entries({
+              live_ingress_enabled: protections.live_ingress_enabled !== false ? "yes" : "no",
+              ai_cost_threshold_exceeded: protectionIndicators.ai_cost_threshold_exceeded ? "yes" : "no",
+              fallback_spike: protectionIndicators.fallback_spike ? "yes" : "no",
+              queue_pressure: protectionIndicators.queue_pressure ? "yes" : "no",
+              recently_rate_limited: protectionIndicators.recently_rate_limited ? "yes" : "no",
+            })}
+            t={t}
+            accent="#8B5CF6"
+          />
+        </Card>
+        <Card t={t} style={{ padding: "18px 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", marginBottom: "12px" }}>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: t.text }}>Ingress Runtime</div>
+            <Tag color={(ingressRuntime.blocked_last_hour || 0) > 0 ? "#F59E0B" : "#34D399"}>
+              {(ingressRuntime.blocked_last_hour || 0) > 0 ? "Throttling observed" : "Clear"}
+            </Tag>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+            <StatCard title="Req Last Minute" value={ingressRuntime.requests_last_minute || 0} sub="Process-local live ingress samples." color={accent} t={t} />
+            <StatCard title="Req Last Hour" value={ingressRuntime.requests_last_hour || 0} sub="Process-local rolling hour samples." color="#10B981" t={t} />
+          </div>
+          <KeyValueList
+            title="Rate Limit Activity"
+            items={Object.entries({
+              blocked_last_hour: ingressRuntime.blocked_last_hour || 0,
+              blocked_total: ingressRuntime.blocked_total || 0,
+              last_block_reason: ingressRuntime.last_block_reason || "none",
+            })}
+            t={t}
+            accent="#F59E0B"
+          />
+        </Card>
       </div>
 
       <KeyValueList title="Busiest Routes (Process)" items={requestRouteRows} t={t} accent={accent} empty="No request traffic recorded yet." />

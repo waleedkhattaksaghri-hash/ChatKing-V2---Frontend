@@ -510,6 +510,7 @@ export function Insights({ t, accent, entitlements }) {
   const retrievalQuality = aPrimary?.retrieval_quality || {};
   const aiCosts = aPrimary?.ai_costs || {};
   const reliability = aPrimary?.reliability || {};
+  const clientProtection = aPrimary?.client_protection || {};
   const showRetrievalQuality = insightEnabled(entitlements, "retrieval_quality");
   const showAiCosts = insightEnabled(entitlements, "ai_costs");
   const showReliability = insightEnabled(entitlements, "reliability");
@@ -599,6 +600,12 @@ export function Insights({ t, accent, entitlements }) {
     { label: "Reply Latency P95", value: formatDurationMs(reliability.end_to_end_reply_latency?.p95_ms || 0), sub: `Avg ${formatDurationMs(reliability.end_to_end_reply_latency?.avg_ms || 0)}`, color: "#10B981" },
     { label: "Fallback Generation", value: `${reliability.fallback_generation_rate?.rate || 0}%`, sub: `${reliability.fallback_generation_rate?.count || 0} conversations`, color: "#8B5CF6" },
     { label: "Summary Backlog", value: String(reliability.summary_backlog?.count || 0), sub: `${reliability.summary_backlog?.rate || 0}% awaiting summary`, color: "#FB7185" },
+  ];
+  const protectionCards = [
+    { label: "Rollout Mode", value: (clientProtection.rollout_mode || "full_production").replace(/_/g, " "), sub: clientProtection.live_ingress_enabled === false ? "Live ingress disabled" : "Live ingress enabled", color: "#8B5CF6" },
+    { label: "Req / Hour", value: String(clientProtection.protections?.request_ceiling_per_hour || 0), sub: "Configured hourly ceiling", color: accent },
+    { label: "Burst / Minute", value: String(clientProtection.protections?.burst_ceiling_per_minute || 0), sub: "Configured burst protection", color: "#06B6D4" },
+    { label: "Rate Limited (1h)", value: String(clientProtection.ingress_runtime?.blocked_last_hour || 0), sub: clientProtection.ingress_runtime?.last_block_reason || "No recent throttling", color: "#F59E0B" },
   ];
 
   const filteredOpps = allOpps.filter(opp => {
@@ -994,6 +1001,41 @@ export function Insights({ t, accent, entitlements }) {
               accent="#FB7185"
               t={t}
               emptyLabel="No stage failures recorded in this range."
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+            {protectionCards.map((item) => (
+              <CostMetricCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                sub={item.sub}
+                color={item.color}
+                t={t}
+              />
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+            <RankedMetricList
+              title="Protection Indicators"
+              items={[
+                { label: "AI Cost Alert Threshold Exceeded", count: clientProtection.indicators?.ai_cost_threshold_exceeded ? 1 : 0, rate: clientProtection.indicators?.ai_cost_threshold_exceeded ? 100 : 0 },
+                { label: "Fallback Spike", count: clientProtection.indicators?.fallback_spike ? 1 : 0, rate: clientProtection.indicators?.fallback_spike ? 100 : 0 },
+                { label: "Queue Pressure", count: clientProtection.indicators?.queue_pressure ? 1 : 0, rate: clientProtection.indicators?.queue_pressure ? 100 : 0 },
+                { label: "Recently Rate Limited", count: clientProtection.indicators?.recently_rate_limited ? 1 : 0, rate: clientProtection.indicators?.recently_rate_limited ? 100 : 0 },
+              ]}
+              accent="#8B5CF6"
+              t={t}
+              emptyLabel="No protection indicators recorded yet."
+            />
+            <RankedMetricList
+              title="Ingress Block Reasons"
+              items={Object.entries(clientProtection.ingress_runtime?.blocked_by_reason || {}).map(([label, count]) => ({ label, count, rate: 0 }))}
+              accent="#F59E0B"
+              t={t}
+              emptyLabel="No ingress throttling or sandbox blocks recorded."
             />
           </div>
         </>
