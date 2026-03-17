@@ -10,6 +10,14 @@ const ROLLOUT_MODES = [
   ["full_production", "Full Production"],
 ];
 
+const LIVE_ROLLOUT_MODES = [
+  ["full_on", "Full On"],
+  ["off", "Off"],
+  ["percentage", "Percentage"],
+  ["time_window", "Time Window"],
+  ["percentage_in_window", "Percentage In Window"],
+];
+
 const PROTECTION_FIELDS = [
   ["request_ceiling_per_hour", "Request Ceiling / Hour"],
   ["burst_ceiling_per_minute", "Burst Ceiling / Minute"],
@@ -101,6 +109,18 @@ function cloneProtections(protections = {}) {
   return JSON.parse(JSON.stringify(protections || {}));
 }
 
+function readinessTone(status) {
+  if (status === "ready") return "#34D399";
+  if (status === "ready_with_warnings") return "#F59E0B";
+  return "#FB7185";
+}
+
+function checklistTone(status) {
+  if (status === "pass") return "#34D399";
+  if (status === "block") return "#FB7185";
+  return "#F59E0B";
+}
+
 export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedClientId, setSelectedClientId] = useState(activeClient?.id || null);
@@ -108,6 +128,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
   const [draftRolloutMode, setDraftRolloutMode] = useState(activeClient?.rollout_mode || "full_production");
   const [draftProtections, setDraftProtections] = useState(activeClient?.protections || {});
   const [draftToolRollout, setDraftToolRollout] = useState(activeClient?.tool_rollout || activeClient?.protections?.tool_rollout || {});
+  const [draftLiveRollout, setDraftLiveRollout] = useState(activeClient?.live_rollout || activeClient?.protections?.live_rollout || {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
@@ -123,11 +144,18 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
     () => clients.find((client) => client.id === selectedClientId) || clients[0] || null,
     [clients, selectedClientId]
   );
+  const { data: readinessPayload } = useApi(
+    selectedClient?.id ? `/api/organizations/owner/clients/${selectedClient.id}/readiness` : null,
+    null,
+    [selectedClient?.id, refreshTick]
+  );
 
   const effectiveEntitlements = draftEntitlements || selectedClient?.entitlements || null;
   const effectiveRolloutMode = draftRolloutMode || selectedClient?.rollout_mode || "full_production";
   const effectiveProtections = draftProtections || selectedClient?.protections || {};
   const effectiveToolRollout = draftToolRollout || selectedClient?.tool_rollout || selectedClient?.protections?.tool_rollout || {};
+  const effectiveLiveRollout = draftLiveRollout || selectedClient?.live_rollout || selectedClient?.protections?.live_rollout || {};
+  const readiness = readinessPayload?.readiness || null;
 
   async function handleSave() {
     if (!selectedClient) return;
@@ -143,6 +171,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
           rollout_mode: effectiveRolloutMode,
           protections: effectiveProtections,
           tool_rollout: effectiveToolRollout,
+          live_rollout: effectiveLiveRollout,
         },
       });
 
@@ -150,6 +179,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
       setDraftRolloutMode(payload.rollout_mode || "full_production");
       setDraftProtections(payload.protections || {});
       setDraftToolRollout(payload.tool_rollout || payload.protections?.tool_rollout || {});
+      setDraftLiveRollout(payload.live_rollout || payload.protections?.live_rollout || {});
       setSavedMessage("Client access and rollout controls updated.");
       setRefreshTick((current) => current + 1);
       await Promise.all([refetch(), onClientsChanged?.()]);
@@ -210,6 +240,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                       setDraftRolloutMode(client.rollout_mode || "full_production");
                       setDraftProtections(cloneProtections(client.protections));
                       setDraftToolRollout(cloneProtections(client.tool_rollout || client.protections?.tool_rollout));
+                      setDraftLiveRollout(cloneProtections(client.live_rollout || client.protections?.live_rollout));
                       setError("");
                       setSavedMessage("");
                     }}
@@ -255,6 +286,11 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                   <Pill color={effectiveRolloutMode === "sandbox" ? "#F59E0B" : effectiveRolloutMode === "pilot" ? "#60A5FA" : effectiveRolloutMode === "limited_production" ? "#8B5CF6" : "#10B981"}>
                     {effectiveRolloutMode.replace(/_/g, " ")}
                   </Pill>
+                  {readiness ? (
+                    <Pill color={readinessTone(readiness.status)}>
+                      {readiness.status.replace(/_/g, " ")}
+                    </Pill>
+                  ) : null}
                 </div>
               </div>
 
@@ -262,6 +298,39 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
               {savedMessage ? <div style={{ color: "#34D399", fontSize: "12px", marginBottom: "12px" }}>{savedMessage}</div> : null}
 
               <div style={{ display: "grid", gap: "14px" }}>
+                <Card t={t} style={{ padding: "16px 18px", background: t.surfaceHover }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: t.text }}>Go-Live Readiness</div>
+                      <div style={{ fontSize: "11px", color: t.textMuted, marginTop: "4px" }}>
+                        Practical onboarding checklist for pilot and production readiness.
+                      </div>
+                    </div>
+                    <Pill color={readinessTone(readiness?.status)}>{(readiness?.status || "loading").replace(/_/g, " ")}</Pill>
+                  </div>
+                  {!readiness ? (
+                    <div style={{ fontSize: "12px", color: t.textMuted }}>Loading readiness checklist...</div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+                        <Pill color="#FB7185">Blockers: {readiness.summary?.blocker_count || 0}</Pill>
+                        <Pill color="#F59E0B">Warnings: {readiness.summary?.warning_count || 0}</Pill>
+                      </div>
+                      <div style={{ display: "grid", gap: "10px" }}>
+                        {(readiness.checklist || []).map((item) => (
+                          <div key={item.key} style={{ padding: "12px 14px", borderRadius: "12px", border: `1px solid ${t.border}`, background: t.surface }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "6px", flexWrap: "wrap" }}>
+                              <div style={{ fontSize: "12px", fontWeight: "700", color: t.text }}>{item.label}</div>
+                              <Pill color={checklistTone(item.status)}>{item.status}</Pill>
+                            </div>
+                            <div style={{ fontSize: "12px", color: t.textSub, lineHeight: 1.6 }}>{item.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </Card>
+
                 <Card t={t} style={{ padding: "16px 18px", background: t.surfaceHover }}>
                   <div style={{ fontSize: "13px", fontWeight: "700", color: t.text, marginBottom: "12px" }}>Rollout and Protections</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
@@ -364,6 +433,171 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                         />
                       </div>
                     ))}
+                  </div>
+
+                  <div style={{ marginTop: "18px", paddingTop: "16px", borderTop: `1px solid ${t.border}` }}>
+                    <div style={{ fontSize: "12px", fontWeight: "700", color: t.text, marginBottom: "10px" }}>Live Traffic Rollout</div>
+                    <div style={{ fontSize: "11px", color: t.textMuted, marginBottom: "12px", lineHeight: 1.6 }}>
+                      Control whether AI is fully on, off, percentage-based, time-boxed, or percentage-limited inside a time window.
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        <label style={{ fontSize: "12px", color: t.textSub, fontWeight: "700" }}>Live Rollout Mode</label>
+                        <select
+                          value={effectiveLiveRollout?.mode || "full_on"}
+                          onChange={(event) => {
+                            setDraftLiveRollout((current) => ({
+                              ...(current || selectedClient.live_rollout || selectedClient.protections?.live_rollout || {}),
+                              mode: event.target.value,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          style={{
+                            border: `1px solid ${t.border}`,
+                            borderRadius: "10px",
+                            background: t.surface,
+                            color: t.text,
+                            padding: "11px 12px",
+                            fontSize: "12px",
+                            outline: "none",
+                          }}
+                        >
+                          {LIVE_ROLLOUT_MODES.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        <label style={{ fontSize: "12px", color: t.textSub, fontWeight: "700" }}>Percentage</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={effectiveLiveRollout?.percentage ?? 100}
+                          onChange={(event) => {
+                            const nextValue = event.target.value === "" ? "" : Number(event.target.value);
+                            setDraftLiveRollout((current) => ({
+                              ...(current || selectedClient.live_rollout || selectedClient.protections?.live_rollout || {}),
+                              percentage: nextValue,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          style={{
+                            border: `1px solid ${t.border}`,
+                            borderRadius: "10px",
+                            background: t.surface,
+                            color: t.text,
+                            padding: "11px 12px",
+                            fontSize: "12px",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        <label style={{ fontSize: "12px", color: t.textSub, fontWeight: "700" }}>Starts At</label>
+                        <input
+                          type="datetime-local"
+                          value={effectiveLiveRollout?.starts_at ? new Date(effectiveLiveRollout.starts_at).toISOString().slice(0, 16) : ""}
+                          onChange={(event) => {
+                            setDraftLiveRollout((current) => ({
+                              ...(current || selectedClient.live_rollout || selectedClient.protections?.live_rollout || {}),
+                              starts_at: event.target.value ? new Date(event.target.value).toISOString() : null,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          style={{
+                            border: `1px solid ${t.border}`,
+                            borderRadius: "10px",
+                            background: t.surface,
+                            color: t.text,
+                            padding: "11px 12px",
+                            fontSize: "12px",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        <label style={{ fontSize: "12px", color: t.textSub, fontWeight: "700" }}>Ends At</label>
+                        <input
+                          type="datetime-local"
+                          value={effectiveLiveRollout?.ends_at ? new Date(effectiveLiveRollout.ends_at).toISOString().slice(0, 16) : ""}
+                          onChange={(event) => {
+                            setDraftLiveRollout((current) => ({
+                              ...(current || selectedClient.live_rollout || selectedClient.protections?.live_rollout || {}),
+                              ends_at: event.target.value ? new Date(event.target.value).toISOString() : null,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          style={{
+                            border: `1px solid ${t.border}`,
+                            borderRadius: "10px",
+                            background: t.surface,
+                            color: t.text,
+                            padding: "11px 12px",
+                            fontSize: "12px",
+                            outline: "none",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+                      <div
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "12px",
+                          border: `1px solid ${t.border}`,
+                          background: t.surface,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "12px",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: "700", color: t.text }}>Live rollout enabled</div>
+                          <div style={{ fontSize: "11px", color: t.textMuted, marginTop: "4px" }}>Master enable for the staged live rollout controller.</div>
+                        </div>
+                        <Toggle
+                          value={effectiveLiveRollout?.enabled !== false}
+                          onChange={(nextValue) => {
+                            setDraftLiveRollout((current) => ({
+                              ...(current || selectedClient.live_rollout || selectedClient.protections?.live_rollout || {}),
+                              enabled: nextValue,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          accent={accent}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "12px",
+                          border: `1px solid ${t.border}`,
+                          background: t.surface,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "12px",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: "700", color: t.text }}>Kill switch</div>
+                          <div style={{ fontSize: "11px", color: t.textMuted, marginTop: "4px" }}>Instantly bypass AI for live ingress without changing the configured rollout plan.</div>
+                        </div>
+                        <Toggle
+                          value={effectiveLiveRollout?.kill_switch === true}
+                          onChange={(nextValue) => {
+                            setDraftLiveRollout((current) => ({
+                              ...(current || selectedClient.live_rollout || selectedClient.protections?.live_rollout || {}),
+                              kill_switch: nextValue,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          accent={accent}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </Card>
 
