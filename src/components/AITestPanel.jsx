@@ -88,8 +88,71 @@ function GuardrailSummary({ diagnostics, t, accent }) {
   );
 }
 
+function sourceLabelFromProvenance(provenance = {}) {
+  const primary = String(provenance.primary_source || "");
+  if (primary === "sop") return "SOP";
+  if (primary === "knowledge_base") return "Knowledge Base";
+  if (primary === "client_memory") return "Client Memory";
+  if (primary === "issue_type") return "Issue Type";
+  if (primary === "fallback") return "Fallback";
+  if (provenance.mode === "clarify") return "Clarification";
+  if (provenance.mode === "escalate") return "Escalation";
+  return "Agent Playbook";
+}
+
+function ProvenancePanel({ message, t, accent, onClose }) {
+  const provenance = message?.metadata?.provenance || null;
+  if (!message || !provenance) return null;
+
+  const behaviorVersions = provenance.behavior_versions || {};
+
+  return (
+    <Card t={t} style={{ padding: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "12px", marginBottom: "12px" }}>
+        <div>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "6px" }}>
+            Reply Source
+          </div>
+          <div style={{ fontSize: "14px", fontWeight: "700", color: t.text }}>
+            {sourceLabelFromProvenance(provenance)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", fontSize: "18px", lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </div>
+      <div style={{ display: "grid", gap: "8px", fontSize: "12px", color: t.textSub, lineHeight: "1.7" }}>
+        <div><strong style={{ color: t.text }}>Mode:</strong> {provenance.mode || "unknown"}</div>
+        {provenance.selection_reason && <div><strong style={{ color: t.text }}>Why it answered this way:</strong> {provenance.selection_reason}</div>}
+        {provenance.issue_type?.name && <div><strong style={{ color: t.text }}>Issue Type:</strong> {provenance.issue_type.name}</div>}
+        {provenance.selected_sop?.title && <div><strong style={{ color: t.text }}>Selected SOP:</strong> {provenance.selected_sop.title}</div>}
+        {provenance.selected_article?.title && <div><strong style={{ color: t.text }}>Knowledge Base:</strong> {provenance.selected_article.title}</div>}
+        {provenance.selected_memory?.title && <div><strong style={{ color: t.text }}>Client Memory:</strong> {provenance.selected_memory.title}</div>}
+        {Array.isArray(provenance.policy_reasons) && provenance.policy_reasons.length > 0 && (
+          <div><strong style={{ color: t.text }}>Policy reasons:</strong> {provenance.policy_reasons.join(", ")}</div>
+        )}
+        {provenance.tool?.requested && (
+          <div><strong style={{ color: t.text }}>Tool:</strong> {provenance.tool.requested} ({provenance.tool.execution_status || "unknown"})</div>
+        )}
+        <div><strong style={{ color: t.text }}>Playbook fingerprint:</strong> {provenance.playbook_fingerprint || "n/a"}</div>
+        <div><strong style={{ color: t.text }}>Response config fingerprint:</strong> {provenance.response_config_fingerprint || "n/a"}</div>
+        <div><strong style={{ color: t.text }}>Behavior versions:</strong> {[
+          behaviorVersions.response_pipeline ? `pipeline ${behaviorVersions.response_pipeline}` : null,
+          behaviorVersions.policy_engine ? `policy ${behaviorVersions.policy_engine}` : null,
+          behaviorVersions.playbook_normalization ? `playbook ${behaviorVersions.playbook_normalization}` : null,
+        ].filter(Boolean).join(", ") || "n/a"}</div>
+      </div>
+    </Card>
+  );
+}
+
 function MessageBubble({ message, t, accent }) {
   const fromCustomer = message.sender_type === "customer";
+  const isClickableAgentMessage = !fromCustomer && !message.isPending && !!message?.metadata?.provenance;
 
   return (
     <div
@@ -110,7 +173,9 @@ function MessageBubble({ message, t, accent }) {
           lineHeight: "1.7",
           boxShadow: fromCustomer ? "none" : message.isPending ? "none" : t.shadow,
           width: "fit-content",
+          cursor: isClickableAgentMessage ? "pointer" : "default",
         }}
+        title={isClickableAgentMessage ? "Click to inspect where this reply came from" : undefined}
       >
         <div style={{ fontSize: "10px", fontWeight: "700", color: fromCustomer ? accent : t.textMuted, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           {fromCustomer ? "Customer" : message.isPending ? "Agent thinking" : "Agent"}
@@ -140,6 +205,7 @@ export function AITestPanel({ t, accent }) {
   const [lastReply, setLastReply] = useState("");
   const [lastDiagnostics, setLastDiagnostics] = useState(null);
   const [pendingAgentMessageId, setPendingAgentMessageId] = useState("");
+  const [selectedAgentMessageId, setSelectedAgentMessageId] = useState("");
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) || null;
 
@@ -172,6 +238,7 @@ export function AITestPanel({ t, accent }) {
       setLastReply("");
       setLastDiagnostics(null);
       setPendingAgentMessageId("");
+      setSelectedAgentMessageId("");
       return;
     }
 
@@ -187,6 +254,7 @@ export function AITestPanel({ t, accent }) {
       setMessages(sortMessagesChronologically(data));
       setPendingAgentMessageId("");
       setLastDiagnostics(null);
+      setSelectedAgentMessageId("");
       const latestBot = [...data].reverse().find((item) => item.sender_type === "bot");
       setLastReply(latestBot?.content || "");
     } catch (nextError) {
@@ -197,6 +265,7 @@ export function AITestPanel({ t, accent }) {
   }
 
   const clientId = getActiveClientId();
+  const selectedAgentMessage = messages.find((message) => message.id === selectedAgentMessageId && message.sender_type === "bot") || null;
 
   useEffect(() => {
     if (!clientId) return;
@@ -265,6 +334,8 @@ export function AITestPanel({ t, accent }) {
       setMessages(sortMessagesChronologically(payload.messages || []));
       setPendingAgentMessageId("");
       setLastReply(payload.reply || "");
+      const latestAgentMessage = sortMessagesChronologically(payload.messages || []).filter((message) => message.sender_type === "bot").slice(-1)[0] || null;
+      setSelectedAgentMessageId(latestAgentMessage?.id || "");
       setLastDiagnostics({
         guardrails: payload.guardrails || null,
         sourceSelection: payload.source_selection || null,
@@ -275,6 +346,7 @@ export function AITestPanel({ t, accent }) {
       setMessages((current) => current.filter((message) => message.id !== optimisticCustomerId && message.id !== optimisticAgentId));
       setPendingAgentMessageId("");
       setLastDiagnostics(null);
+      setSelectedAgentMessageId("");
       setDraftMessage(outgoingMessage);
       setError(nextError.message || "Failed to send test message.");
     } finally {
@@ -554,7 +626,16 @@ export function AITestPanel({ t, accent }) {
                 )}
 
                 {messages.map((message) => (
-                  <MessageBubble key={message.id || `${message.sender_type}-${message.created_at}`} message={message} t={t} accent={accent} />
+                  <div
+                    key={message.id || `${message.sender_type}-${message.created_at}`}
+                    onClick={() => {
+                      if (message.sender_type === "bot" && message.metadata?.provenance) {
+                        setSelectedAgentMessageId(message.id || "");
+                      }
+                    }}
+                  >
+                    <MessageBubble message={message} t={t} accent={accent} />
+                  </div>
                 ))}
 
                 {!loadingMessages && lastReply && !messages.some((message) => message.sender_type === "bot" && message.content === lastReply) && (
@@ -567,8 +648,7 @@ export function AITestPanel({ t, accent }) {
               </div>
 
               <GuardrailSummary diagnostics={lastDiagnostics} t={t} accent={accent} />
-
-              <GuardrailSummary diagnostics={lastDiagnostics} t={t} accent={accent} />
+              <ProvenancePanel message={selectedAgentMessage} t={t} accent={accent} onClose={() => setSelectedAgentMessageId("")} />
 
               <div style={{ display: "grid", gap: "10px" }}>
                 <textarea
