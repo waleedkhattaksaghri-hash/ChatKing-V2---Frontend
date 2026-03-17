@@ -44,6 +44,16 @@ function expectedSummary(evalCase) {
   return parts.length ? parts.join(" ? ") : "No expectations configured yet.";
 }
 
+function formatBehaviorSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return "No behavior snapshot";
+  const versions = snapshot.versions || {};
+  return [
+    versions.response_pipeline ? `pipeline ${versions.response_pipeline}` : null,
+    versions.policy_engine ? `policy ${versions.policy_engine}` : null,
+    snapshot.response_config_fingerprint ? `cfg ${snapshot.response_config_fingerprint}` : null,
+  ].filter(Boolean).join(" · ") || "No behavior snapshot";
+}
+
 function actualSummary(result) {
   const parts = [];
   if (result.actual_decision) parts.push(`Decision: ${result.actual_decision}`);
@@ -332,6 +342,9 @@ export function Evaluations({ t, accent }) {
                   <div style={{ fontSize: "12px", color: t.textSub, marginTop: "6px" }}>
                     {run.passed_cases || 0}/{run.total_cases || 0} passed ? {metricLabel(run.metrics?.pass_rate)} pass rate
                   </div>
+                  <div style={{ fontSize: "11px", color: t.textMuted, marginTop: "6px" }}>
+                    {formatBehaviorSnapshot(run.options?.behavior_version_snapshot)}
+                  </div>
                 </button>
               );
             })}
@@ -395,6 +408,9 @@ export function Evaluations({ t, accent }) {
 
           {currentReport && (
             <div style={{ display: "grid", gap: "14px" }}>
+              <div style={{ padding: "12px 14px", borderRadius: "12px", background: t.surfaceHover, border: `1px solid ${t.border}`, fontSize: "11px", color: t.textMuted, lineHeight: "1.6" }}>
+                <strong style={{ color: t.text }}>Behavior Snapshot:</strong> {formatBehaviorSnapshot(currentReport.run?.options?.behavior_version_snapshot)}
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
                 {metricCard({ label: "Pass rate", value: metricLabel(metrics?.pass_rate), hint: metrics ? `${metrics.passed_cases}/${metrics.total_cases} passed` : "", t, accent })}
                 {metricCard({ label: "SOP usage", value: metricLabel(metrics?.sop_usage_accuracy), hint: "Expected SOP selected when configured.", t, accent })}

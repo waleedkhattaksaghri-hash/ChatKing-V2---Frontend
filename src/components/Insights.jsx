@@ -510,6 +510,7 @@ export function Insights({ t, accent, entitlements }) {
   const retrievalQuality = aPrimary?.retrieval_quality || {};
   const aiCosts = aPrimary?.ai_costs || {};
   const reliability = aPrimary?.reliability || {};
+  const behaviorGovernance = aPrimary?.behavior_governance || {};
   const clientProtection = aPrimary?.client_protection || {};
   const showRetrievalQuality = insightEnabled(entitlements, "retrieval_quality");
   const showAiCosts = insightEnabled(entitlements, "ai_costs");
@@ -606,6 +607,12 @@ export function Insights({ t, accent, entitlements }) {
     { label: "Req / Hour", value: String(clientProtection.protections?.request_ceiling_per_hour || 0), sub: "Configured hourly ceiling", color: accent },
     { label: "Burst / Minute", value: String(clientProtection.protections?.burst_ceiling_per_minute || 0), sub: "Configured burst protection", color: "#06B6D4" },
     { label: "Rate Limited (1h)", value: String(clientProtection.ingress_runtime?.blocked_last_hour || 0), sub: clientProtection.ingress_runtime?.last_block_reason || "No recent throttling", color: "#F59E0B" },
+  ];
+  const behaviorCards = [
+    { label: "Pipeline", value: behaviorGovernance.current?.versions?.response_pipeline || "unknown", sub: "Current response pipeline behavior version", color: "#8B5CF6" },
+    { label: "Policy Engine", value: behaviorGovernance.current?.versions?.policy_engine || "unknown", sub: "Deterministic guardrail version", color: "#06B6D4" },
+    { label: "Playbook Norm", value: behaviorGovernance.current?.versions?.playbook_normalization || "unknown", sub: "Playbook normalization version", color: accent },
+    { label: "Config Fingerprint", value: behaviorGovernance.current?.response_config_fingerprint || "n/a", sub: behaviorGovernance.current?.playbook_fingerprint || "No current fingerprint", color: "#10B981" },
   ];
 
   const filteredOpps = allOpps.filter(opp => {
@@ -1036,6 +1043,40 @@ export function Insights({ t, accent, entitlements }) {
               accent="#F59E0B"
               t={t}
               emptyLabel="No ingress throttling or sandbox blocks recorded."
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+            {behaviorCards.map((item) => (
+              <CostMetricCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                sub={item.sub}
+                color={item.color}
+                t={t}
+              />
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+            <RankedMetricList
+              title="Observed Behavior Versions"
+              items={(behaviorGovernance.observed_behavior_versions || []).map((item) => ({
+                label: `${item.versions?.response_pipeline || "unknown"} / ${item.versions?.policy_engine || "unknown"}`,
+                count: item.count,
+                rate: 0,
+              }))}
+              accent="#8B5CF6"
+              t={t}
+              emptyLabel="No behavior-version observations recorded yet."
+            />
+            <RankedMetricList
+              title="Observed Config Fingerprints"
+              items={behaviorGovernance.observed_config_fingerprints || []}
+              accent="#10B981"
+              t={t}
+              emptyLabel="No config fingerprints recorded yet."
             />
           </div>
         </>

@@ -120,6 +120,7 @@ export function AdminStats({ t, accent }) {
   const jobMetrics = metrics.jobs || {};
   const queue = data?.jobs || {};
   const readiness = data?.readiness || {};
+  const behaviorGovernance = data?.behavior_governance || {};
   const protections = data?.protections || {};
   const ingressRuntime = protections?.ingress_runtime || {};
   const protectionIndicators = protections?.indicators || {};
@@ -290,6 +291,21 @@ export function AdminStats({ t, accent }) {
           />
         </Card>
       </div>
+
+      <KeyValueList
+        title="Behavior Versions"
+        items={Object.entries({
+          playbook_normalization: behaviorGovernance.versions?.playbook_normalization || "unknown",
+          policy_engine: behaviorGovernance.versions?.policy_engine || "unknown",
+          response_pipeline: behaviorGovernance.versions?.response_pipeline || "unknown",
+          eval_runner: behaviorGovernance.versions?.eval_runner || "unknown",
+          playbook_fingerprint: behaviorGovernance.playbook_fingerprint || "n/a",
+          response_config_fingerprint: behaviorGovernance.response_config_fingerprint || "n/a",
+        })}
+        t={t}
+        accent="#8B5CF6"
+        empty="No behavior version data yet."
+      />
 
       <KeyValueList title="Busiest Routes (Process)" items={requestRouteRows} t={t} accent={accent} empty="No request traffic recorded yet." />
     </div>
