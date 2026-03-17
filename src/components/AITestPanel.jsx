@@ -246,11 +246,6 @@ export function AITestPanel({ t, accent }) {
         sourceSelection: payload.source_selection || null,
         aiMeta: payload.ai_meta || null,
       });
-      setLastDiagnostics({
-        guardrails: payload.guardrails || null,
-        sourceSelection: payload.source_selection || null,
-        aiMeta: payload.ai_meta || null,
-      });
       loadSessions(activeSession.id);
     } catch (nextError) {
       setMessages((current) => current.filter((message) => message.id !== optimisticCustomerId && message.id !== optimisticAgentId));
