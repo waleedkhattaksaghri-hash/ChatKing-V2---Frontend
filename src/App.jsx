@@ -17,6 +17,7 @@ import { Reviews } from "./components/Reviews";
 import { Channels } from "./components/Channels";
 import { Team } from "./components/Team";
 import { Companies } from "./components/Companies";
+import { OwnerPanel } from "./components/OwnerPanel";
 import { AdminStats } from "./components/AdminStats";
 import { AdminLoginScreen } from "./components/AdminLoginScreen";
 import { RichTextEditor } from "./components/RichTextEditor";
@@ -129,6 +130,42 @@ function useUndoState(initialValue) {
   }
 
   return [value, setValue, undo, history.length > 0];
+}
+
+const PAGE_ENTITLEMENT_PATHS = {
+  overview: "pages.overview",
+  "agent-overview": "pages.agent_playbook",
+  "issue-types": "pages.issue_types",
+  sops: "pages.sops",
+  knowledge: "pages.knowledge",
+  "client-memory": "pages.client_memory",
+  "ai-test": "pages.ai_test",
+  tools: "pages.tools",
+  "admin-stats": "pages.admin_stats",
+  insights: "pages.insights",
+  tickets: "pages.conversations",
+  automation: "pages.automation",
+  evaluations: "pages.evaluations",
+  reviews: "pages.reviews",
+  companies: "pages.companies",
+  channels: "pages.channels",
+  team: "pages.team",
+};
+
+function getEntitlementValue(entitlements, path) {
+  if (!path) return true;
+  const parts = String(path).split(".").filter(Boolean);
+  let current = entitlements;
+  for (const part of parts) {
+    if (!current || typeof current !== "object") return true;
+    current = current[part];
+  }
+  return current !== false;
+}
+
+function isNavAllowed(navId, entitlements, authSession) {
+  if (navId === "owner-panel") return !!authSession?.isPlatformAdmin;
+  return getEntitlementValue(entitlements, PAGE_ENTITLEMENT_PATHS[navId]);
 }
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1652,19 +1689,7 @@ export default function ChatKing() {
     };
   }, [acc.glow, darkMode, t.bg, t.bgSolid, t.text]);
 
-  if (!authChecked || !authenticated) {
-    return (
-      <AdminLoginScreen
-        t={t}
-        accent={accent}
-        status={{ checking: !authChecked }}
-        onRequestCode={handleRequestLoginCode}
-        onVerifyCode={handleVerifyLoginCode}
-        onLegacyLogin={handleLegacyTokenLogin}
-      />
-    );
-  }
-
+  const activeEntitlements = activeClient?.entitlements || null;
   const navGroups = [
     {
       label: "Platform", items: [
@@ -1697,9 +1722,38 @@ export default function ChatKing() {
         { id: "companies", label: "Companies", icon: "CO" },
         { id: "channels",  label: "Channels",  icon: "CH" },
         { id: "team",      label: "Team",      icon: "TM" },
+        { id: "owner-panel", label: "Owner Panel", icon: "OP" },
       ]
     },
   ];
+
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => isNavAllowed(item.id, activeEntitlements, authSession)),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const firstVisibleNav = visibleNavGroups[0]?.items[0]?.id || "overview";
+
+  useEffect(() => {
+    if (!authChecked || !authenticated) return;
+    if (isNavAllowed(nav, activeEntitlements, authSession)) return;
+    setNav(firstVisibleNav);
+  }, [authChecked, authenticated, nav, activeEntitlements, authSession, firstVisibleNav]);
+
+  if (!authChecked || !authenticated) {
+    return (
+      <AdminLoginScreen
+        t={t}
+        accent={accent}
+        status={{ checking: !authChecked }}
+        onRequestCode={handleRequestLoginCode}
+        onVerifyCode={handleVerifyLoginCode}
+        onLegacyLogin={handleLegacyTokenLogin}
+      />
+    );
+  }
 
   function getSubTab() {
     return null;
@@ -1717,7 +1771,7 @@ export default function ChatKing() {
     if (nav === "ai-test")     return <AITestPanel t={t} accent={accent} />;
     if (nav === "tools")       return <Tools t={t} accent={accent} />;
     if (nav === "admin-stats") return <AdminStats t={t} accent={accent} />;
-    if (nav === "insights")    return <Insights t={t} accent={accent} />;
+    if (nav === "insights")    return <Insights t={t} accent={accent} entitlements={activeEntitlements} />;
     if (nav === "tickets")     return <Tickets t={t} accent={accent} />;
     if (nav === "automation")  return <Automation t={t} accent={accent} />;
     if (nav === "evaluations") return <Evaluations t={t} accent={accent} evaluatedIds={evaluatedIds} setEvaluatedIds={setEvaluatedIds} />;
@@ -1725,6 +1779,7 @@ export default function ChatKing() {
     if (nav === "companies")   return <Companies t={t} accent={accent} activeClient={activeClient} onActivateClient={handleActivateClient} onClientsChanged={loadClients} />;
     if (nav === "channels")    return <Channels t={t} accent={accent} />;
     if (nav === "team")        return <Team t={t} accent={accent} />;
+    if (nav === "owner-panel") return <OwnerPanel t={t} accent={accent} activeClient={activeClient} onClientsChanged={loadClients} />;
     return null;
   }
 
@@ -1736,7 +1791,7 @@ export default function ChatKing() {
   }
 
   const navGroup = ["tickets", "automation", "evaluations", "reviews"].includes(nav) ? "Manage"
-    : ["companies", "channels", "team"].includes(nav) ? "Configure"
+    : ["companies", "channels", "team", "owner-panel"].includes(nav) ? "Configure"
     : nav === "overview" ? "Platform" : "Build";
   const navLabel = {
     "overview": "Overview",
@@ -1756,6 +1811,7 @@ export default function ChatKing() {
     "companies": "Companies",
     "channels": "Channels",
     "team": "Team",
+    "owner-panel": "Owner Panel",
   }[nav] || "Overview";
 
   const fontImport = FONT_OPTIONS.map(f => `family=${f.import}`).join("&");
@@ -1866,7 +1922,7 @@ export default function ChatKing() {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "7px 5px", overflowY: "auto" }}>
-          {navGroups.map(group => (
+          {visibleNavGroups.map(group => (
             <div key={group.label} style={{ marginBottom: "2px" }}>
               {!sideCollapsed && (
                 <div style={{ fontSize: "9.5px", fontWeight: "700", color: t.textMuted,

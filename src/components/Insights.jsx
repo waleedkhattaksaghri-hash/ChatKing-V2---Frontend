@@ -127,6 +127,11 @@ function formatUsd(value) {
   return `$${numeric.toFixed(numeric >= 10 ? 2 : 4)}`;
 }
 
+function insightEnabled(entitlements, key) {
+  if (!entitlements || typeof entitlements !== "object") return true;
+  return entitlements?.insights?.[key] !== false;
+}
+
 function CostMetricCard({ label, value, sub, color, t }) {
   return (
     <Card t={t} style={{ padding: "16px 18px" }}>
@@ -404,7 +409,7 @@ function TakeActionModal({ opp, t, accent, onClose, onDone }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SECTION: INSIGHTS
 // ══════════════════════════════════════════════════════════════════════════════
-export function Insights({ t, accent }) {
+export function Insights({ t, accent, entitlements }) {
   const clientId = getActiveClientId();
   const [oppFilter,      setOppFilter]      = useState("All");
   const [completedIdxs,  setCompletedIdxs]  = useState(new Set());
@@ -505,6 +510,10 @@ export function Insights({ t, accent }) {
   const retrievalQuality = aPrimary?.retrieval_quality || {};
   const aiCosts = aPrimary?.ai_costs || {};
   const reliability = aPrimary?.reliability || {};
+  const showRetrievalQuality = insightEnabled(entitlements, "retrieval_quality");
+  const showAiCosts = insightEnabled(entitlements, "ai_costs");
+  const showReliability = insightEnabled(entitlements, "reliability");
+  const showIssueMix = insightEnabled(entitlements, "issue_mix");
   const retrievalMetricCards = [
     { label: "Policy Overrides", ...retrievalQuality.policy_override_rate, color: "#F59E0B" },
     { label: "Memory Reinforced", ...retrievalQuality.memory_reinforced, color: "#8B5CF6" },
@@ -720,7 +729,7 @@ export function Insights({ t, accent }) {
       )}
 
       {/* Top intents table */}
-      {intents.length > 0 && (
+      {showIssueMix && intents.length > 0 && (
         <Card t={t} style={{ overflow: "hidden", marginBottom: "20px" }}>
           <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontSize: "13px", fontWeight: "700", color: t.text }}>
             Top Issue Types — Last 7 Days
@@ -757,7 +766,7 @@ export function Insights({ t, accent }) {
         </Card>
       )}
 
-      {(retrievalQuality.source_win_rate?.length || retrievalQuality.top_issue_types_mix?.length) && (
+      {showRetrievalQuality && (retrievalQuality.source_win_rate?.length || retrievalQuality.top_issue_types_mix?.length) && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
             {retrievalMetricCards.map((item) => (
@@ -788,7 +797,7 @@ export function Insights({ t, accent }) {
             />
           </div>
 
-          <IssueMixTable items={retrievalQuality.top_issue_types_mix} t={t} accent={accent} />
+          {showIssueMix ? <IssueMixTable items={retrievalQuality.top_issue_types_mix} t={t} accent={accent} /> : null}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
             <RankedMetricList
@@ -824,7 +833,7 @@ export function Insights({ t, accent }) {
         </>
       )}
 
-      {(aiCosts.by_stage?.length || aiCosts.total_cost_usd) && (
+      {showAiCosts && (aiCosts.by_stage?.length || aiCosts.total_cost_usd) && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
             {costMetricCards.map((item) => (
@@ -893,7 +902,7 @@ export function Insights({ t, accent }) {
         </>
       )}
 
-      {(reliability.queue_depth_by_job_type?.length || reliability.webhook_latency?.sample_count || reliability.summary_backlog?.count || reliability.fallback_generation_rate?.count) && (
+      {showReliability && (reliability.queue_depth_by_job_type?.length || reliability.webhook_latency?.sample_count || reliability.summary_backlog?.count || reliability.fallback_generation_rate?.count) && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "20px" }}>
             {reliabilityCards.map((item) => (
