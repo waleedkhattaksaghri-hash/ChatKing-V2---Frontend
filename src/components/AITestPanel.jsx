@@ -18,6 +18,30 @@ function formatDate(value) {
   }
 }
 
+function messageTimestampValue(message) {
+  const numeric = new Date(message?.created_at || 0).getTime();
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function messageRoleRank(message) {
+  if (message?.isPending) return 2;
+  if (message?.sender_type === "customer") return 0;
+  if (message?.sender_type === "bot") return 1;
+  return 3;
+}
+
+function sortMessagesChronologically(items) {
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const timeDelta = messageTimestampValue(a) - messageTimestampValue(b);
+    if (timeDelta !== 0) return timeDelta;
+
+    const roleDelta = messageRoleRank(a) - messageRoleRank(b);
+    if (roleDelta !== 0) return roleDelta;
+
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
+}
+
 function DiagnosticsPill({ label, value, tone = "default", t, accent }) {
   const colors = {
     default: { border: tone === "default" ? `${accent}2f` : t.border, background: `${accent}12`, color: accent },
@@ -160,7 +184,7 @@ export function AITestPanel({ t, accent }) {
       if (!data) {
         throw new Error("Failed to load session messages.");
       }
-      setMessages(data);
+      setMessages(sortMessagesChronologically(data));
       setPendingAgentMessageId("");
       setLastDiagnostics(null);
       const latestBot = [...data].reverse().find((item) => item.sender_type === "bot");
@@ -238,7 +262,7 @@ export function AITestPanel({ t, accent }) {
         },
       });
 
-      setMessages(payload.messages || []);
+      setMessages(sortMessagesChronologically(payload.messages || []));
       setPendingAgentMessageId("");
       setLastReply(payload.reply || "");
       setLastDiagnostics({
