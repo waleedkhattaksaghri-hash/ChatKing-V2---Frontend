@@ -180,6 +180,26 @@ function MessageBubble({ message, t, accent }) {
         <div style={{ fontSize: "10px", fontWeight: "700", color: fromCustomer ? accent : t.textMuted, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           {fromCustomer ? "Customer" : message.isPending ? "Agent thinking" : "Agent"}
         </div>
+        {isClickableAgentMessage && (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              marginBottom: "8px",
+              padding: "4px 8px",
+              borderRadius: "999px",
+              border: `1px solid ${accent}35`,
+              background: `${accent}10`,
+              color: accent,
+              fontSize: "10px",
+              fontWeight: "700",
+              letterSpacing: "0.02em",
+            }}
+          >
+            Click to inspect sources
+          </div>
+        )}
         <div style={{ whiteSpace: "pre-wrap" }}>{message.content}</div>
       </div>
     </div>
