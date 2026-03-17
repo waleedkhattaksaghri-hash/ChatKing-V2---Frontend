@@ -42,6 +42,29 @@ function sortMessagesChronologically(items) {
   });
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return "";
+}
+
+function entityLabel(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value !== "object") return "";
+  return firstNonEmpty(value.title, value.name, value.label, value.slug, value.id);
+}
+
+function formatConfidence(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value);
+  if (numeric <= 1) return `${Math.round(numeric * 100)}%`;
+  return `${Math.round(numeric)}%`;
+}
+
 function DiagnosticsPill({ label, value, tone = "default", t, accent }) {
   const colors = {
     default: { border: tone === "default" ? `${accent}2f` : t.border, background: `${accent}12`, color: accent },
@@ -83,6 +106,53 @@ function GuardrailSummary({ diagnostics, t, accent }) {
         <div><strong style={{ color: t.text }}>Blocked actions:</strong> {blockedActions.length ? blockedActions.join(", ") : "None"}</div>
         <div><strong style={{ color: t.text }}>Allowed tools:</strong> {allowedTools.length ? allowedTools.join(", ") : "No tools exposed"}</div>
         {guardrails.clarification_question && <div><strong style={{ color: t.text }}>Guardrail clarification:</strong> {guardrails.clarification_question}</div>}
+      </div>
+    </Card>
+  );
+}
+
+function LatestReplyAnalysis({ diagnostics, t, accent }) {
+  if (!diagnostics?.guardrails && !diagnostics?.aiMeta && !diagnostics?.sourceSelection) return null;
+
+  const sourceSelection = diagnostics.sourceSelection || {};
+  const aiMeta = diagnostics.aiMeta || {};
+  const guardrails = diagnostics.guardrails || {};
+  const policyReasons = Array.isArray(aiMeta.policy_reasons)
+    ? aiMeta.policy_reasons
+    : Array.isArray(guardrails.reasons)
+      ? guardrails.reasons
+      : [];
+
+  const rows = [
+    ["Reply mode", firstNonEmpty(sourceSelection.mode, aiMeta.policy_mode)],
+    ["Primary source", firstNonEmpty(sourceSelection.primary_source, aiMeta.primary_source, aiMeta.selection_primary_source)],
+    ["Issue type", firstNonEmpty(aiMeta.retrieval_issue_type_name, entityLabel(sourceSelection.issue_type), aiMeta.issue_type_name)],
+    ["Selected SOP", firstNonEmpty(entityLabel(sourceSelection.selected_sop), aiMeta.selected_sop_title, aiMeta.selected_sop_name)],
+    ["Selected KB", firstNonEmpty(entityLabel(sourceSelection.selected_kb), aiMeta.selected_kb_title, aiMeta.selected_kb_name)],
+    ["Selected memory", firstNonEmpty(entityLabel(sourceSelection.selected_memory), aiMeta.selected_memory_title, aiMeta.selected_memory_name)],
+    ["Retrieval confidence", formatConfidence(firstNonEmpty(aiMeta.retrieval_confidence, sourceSelection.retrieval_confidence, aiMeta.confidence))],
+    ["Policy reasons", policyReasons.length ? policyReasons.join(", ") : ""],
+    ["Tool used", firstNonEmpty(aiMeta.tool_name, aiMeta.tool_requested, sourceSelection.tool_name)],
+    ["Playbook fingerprint", firstNonEmpty(aiMeta.playbook_fingerprint)],
+    ["Response config fingerprint", firstNonEmpty(aiMeta.response_config_fingerprint)],
+  ].filter(([, value]) => value);
+
+  if (!rows.length) return null;
+
+  return (
+    <Card t={t} style={{ padding: "16px" }}>
+      <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "10px" }}>
+        Latest Reply Analysis
+      </div>
+      <div style={{ fontSize: "12px", color: t.textSub, lineHeight: "1.7", marginBottom: "12px" }}>
+        This shows the evidence and decision metadata for the latest AI reply in this test session, without affecting stored conversation messages.
+      </div>
+      <div style={{ display: "grid", gap: "8px", fontSize: "12px", color: t.textSub, lineHeight: "1.7" }}>
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <strong style={{ color: t.text }}>{label}:</strong> {value}
+          </div>
+        ))}
       </div>
     </Card>
   );
@@ -566,7 +636,10 @@ export function AITestPanel({ t, accent }) {
                 )}
               </div>
 
-              <GuardrailSummary diagnostics={lastDiagnostics} t={t} accent={accent} />
+              <div style={{ display: "grid", gap: "12px" }}>
+                <LatestReplyAnalysis diagnostics={lastDiagnostics} t={t} accent={accent} />
+                <GuardrailSummary diagnostics={lastDiagnostics} t={t} accent={accent} />
+              </div>
 
               <div style={{ display: "grid", gap: "10px" }}>
                 <textarea
