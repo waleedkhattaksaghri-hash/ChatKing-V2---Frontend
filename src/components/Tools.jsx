@@ -29,6 +29,12 @@ const VERIFICATION_OPTIONS = [
   { value: "manual", label: "Manual / async confirmation" },
   { value: "none", label: "No verification check" },
 ];
+const APPROVAL_STATUS_OPTIONS = [
+  { value: "approved", label: "Approved" },
+  { value: "draft", label: "Draft / Pending" },
+  { value: "owner_approved", label: "Owner Approved" },
+  { value: "sandbox_only", label: "Sandbox Only" },
+];
 
 function getSuggestedGovernanceForType(toolType = "") {
   switch (toolType) {
@@ -72,12 +78,24 @@ function getToolGovernance(tool = {}) {
   return tool.tool_governance || tool.response_schema?._tool_governance || {};
 }
 
+function getToolRollout(tool = {}) {
+  return tool.tool_rollout || tool.response_schema?._tool_rollout || {};
+}
+
 function toolGovernanceSummary(tool = {}) {
   const governance = getToolGovernance(tool);
   const category = governance.tool_category || "read";
   const risk = governance.side_effect_risk_level || "low";
   const confirmation = governance.confirmation_mode || "none";
   return `${category} · ${risk} risk${confirmation !== "none" ? ` · ${confirmation.replace(/_/g, " ")}` : ""}`;
+}
+
+function toolApprovalSummary(tool = {}) {
+  const rollout = getToolRollout(tool);
+  const approval = rollout.approval_status || "approved";
+  const live = rollout.live_enabled === false ? "live off" : "live on";
+  const sandbox = rollout.sandbox_enabled === false ? "sandbox off" : "sandbox on";
+  return `${approval.replace(/_/g, " ")} · ${live} · ${sandbox}`;
 }
 
 // ── Parameters Builder ────────────────────────────────────────────────────────
@@ -147,6 +165,7 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
   const isEdit = !!tool?.id;
   const [form, setForm] = useState(() => {
   const governance = getToolGovernance(tool || {});
+  const rollout = getToolRollout(tool || {});
   const suggested = getSuggestedGovernanceForType(tool?.tool_type || "api");
   const baseTool = {
     name: "", slug: "", description: "", tool_type: "api",
@@ -161,6 +180,9 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
     verification_mode: governance.verification_mode || suggested.verification_mode,
     success_json_path: governance.success_json_path || "",
     success_value: governance.success_value === undefined ? "true" : JSON.stringify(governance.success_value),
+    approval_status: rollout.approval_status || (suggested.tool_category === "side_effect" ? "sandbox_only" : suggested.tool_category === "write" ? "draft" : "approved"),
+    live_enabled: rollout.live_enabled !== undefined ? !!rollout.live_enabled : suggested.tool_category === "read",
+    sandbox_enabled: rollout.sandbox_enabled !== undefined ? !!rollout.sandbox_enabled : true,
     ...(tool || {}),
   };
 
@@ -192,6 +214,9 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
         next.requires_confirmation = suggested.requires_confirmation;
         next.confirmation_mode = suggested.confirmation_mode;
         next.verification_mode = suggested.verification_mode;
+        next.approval_status = suggested.tool_category === "side_effect" ? "sandbox_only" : suggested.tool_category === "write" ? "draft" : "approved";
+        next.live_enabled = suggested.tool_category === "read";
+        next.sandbox_enabled = true;
       }
       return next;
     });
@@ -421,6 +446,29 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
                 {inlineInput("success_value", "true")}
               </div>
             </div>
+            <div style={{ ...row2, marginTop: "14px" }}>
+              <div>{fieldLabel("Approval Status")}{sel("approval_status", APPROVAL_STATUS_OPTIONS)}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: t.text, marginTop: "22px" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.live_enabled}
+                    onChange={e => set("live_enabled", e.target.checked)}
+                    style={{ accentColor: accent }}
+                  />
+                  Live enabled
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: t.text, marginTop: "22px" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.sandbox_enabled}
+                    onChange={e => set("sandbox_enabled", e.target.checked)}
+                    style={{ accentColor: accent }}
+                  />
+                  Sandbox enabled
+                </label>
+              </div>
+            </div>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: t.text, marginTop: "14px" }}>
               <input
                 type="checkbox"
@@ -435,7 +483,7 @@ function ToolFormModal({ tool, t, accent, onSave, onClose }) {
               Require confirmation before execution
             </label>
             <div style={{ fontSize: "11px", color: t.textSub, marginTop: "8px", lineHeight: "1.5" }}>
-              Use this to tell ChatKing whether a tool is a lookup, an action, or a higher-risk workflow, and whether success must be verified before the agent can imply completion.
+              Use this to tell ChatKing whether a tool is a lookup, an action, or a higher-risk workflow, whether success must be verified before the agent can imply completion, and whether it is approved for live rollout.
             </div>
           </div>
         </div>
@@ -509,6 +557,7 @@ function ToolTestModal({ tool, t, accent, onClose }) {
           <div style={{ fontSize: "11px", color: t.textSub, marginBottom: "14px", lineHeight: "1.5",
             padding: "10px 12px", borderRadius: "8px", background: t.surfaceHover, border: `1px solid ${t.border}` }}>
             <strong style={{ color: t.text }}>Governance:</strong> {toolGovernanceSummary(tool)}
+            <div style={{ marginTop: "4px" }}><strong style={{ color: t.text }}>Approval:</strong> {toolApprovalSummary(tool)}</div>
             {governance.verification_mode ? (
               <div style={{ marginTop: "4px" }}>Verification mode: {governance.verification_mode.replace(/_/g, " ")}</div>
             ) : null}
@@ -804,6 +853,7 @@ export function Tools({ t, accent }) {
                 {/* Governance */}
                 <div style={{ fontSize: "11px", color: t.textMuted, lineHeight: "1.45" }}>
                   <div style={{ color: t.textSub }}>{toolGovernanceSummary(tool)}</div>
+                  <div style={{ color: "#8B5CF6", marginTop: "2px" }}>{toolApprovalSummary(tool)}</div>
                   <div style={{ fontFamily: "'DM Mono', monospace", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {tool.method && <span style={{ color: accent, marginRight: "4px" }}>{tool.method}</span>}
                     {tool.endpoint || "local / internal"}

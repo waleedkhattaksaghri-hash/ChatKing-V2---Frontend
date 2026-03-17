@@ -18,6 +18,12 @@ const PROTECTION_FIELDS = [
   ["queue_backlog_warning_threshold", "Queue Backlog Warning"],
 ];
 
+const TOOL_ROLLOUT_FIELDS = [
+  ["allow_read_tools", "Allow Read-Only Tools"],
+  ["allow_write_tools", "Allow Write / Action Tools"],
+  ["allow_side_effect_tools", "Allow Side-Effect Tools"],
+];
+
 const ENTITLEMENT_GROUPS = [
   {
     key: "pages",
@@ -101,6 +107,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
   const [draftEntitlements, setDraftEntitlements] = useState(null);
   const [draftRolloutMode, setDraftRolloutMode] = useState(activeClient?.rollout_mode || "full_production");
   const [draftProtections, setDraftProtections] = useState(activeClient?.protections || {});
+  const [draftToolRollout, setDraftToolRollout] = useState(activeClient?.tool_rollout || activeClient?.protections?.tool_rollout || {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
@@ -120,6 +127,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
   const effectiveEntitlements = draftEntitlements || selectedClient?.entitlements || null;
   const effectiveRolloutMode = draftRolloutMode || selectedClient?.rollout_mode || "full_production";
   const effectiveProtections = draftProtections || selectedClient?.protections || {};
+  const effectiveToolRollout = draftToolRollout || selectedClient?.tool_rollout || selectedClient?.protections?.tool_rollout || {};
 
   async function handleSave() {
     if (!selectedClient) return;
@@ -134,12 +142,14 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
           entitlements: effectiveEntitlements,
           rollout_mode: effectiveRolloutMode,
           protections: effectiveProtections,
+          tool_rollout: effectiveToolRollout,
         },
       });
 
       setDraftEntitlements(payload.entitlements);
       setDraftRolloutMode(payload.rollout_mode || "full_production");
       setDraftProtections(payload.protections || {});
+      setDraftToolRollout(payload.tool_rollout || payload.protections?.tool_rollout || {});
       setSavedMessage("Client access and rollout controls updated.");
       setRefreshTick((current) => current + 1);
       await Promise.all([refetch(), onClientsChanged?.()]);
@@ -199,6 +209,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                       setDraftEntitlements(cloneEntitlements(client.entitlements));
                       setDraftRolloutMode(client.rollout_mode || "full_production");
                       setDraftProtections(cloneProtections(client.protections));
+                      setDraftToolRollout(cloneProtections(client.tool_rollout || client.protections?.tool_rollout));
                       setError("");
                       setSavedMessage("");
                     }}
@@ -320,6 +331,40 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                       </div>
                     ))}
                   </div>
+
+                  <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
+                    {TOOL_ROLLOUT_FIELDS.map(([fieldKey, label]) => (
+                      <div
+                        key={fieldKey}
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "12px",
+                          border: `1px solid ${t.border}`,
+                          background: t.surface,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "12px",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: "700", color: t.text }}>{label}</div>
+                          <div style={{ fontSize: "11px", color: t.textMuted, marginTop: "4px" }}>tool_rollout.{fieldKey}</div>
+                        </div>
+                        <Toggle
+                          value={effectiveToolRollout?.[fieldKey] !== false}
+                          onChange={(nextValue) => {
+                            setDraftToolRollout((current) => ({
+                              ...(current || selectedClient.tool_rollout || selectedClient.protections?.tool_rollout || {}),
+                              [fieldKey]: nextValue,
+                            }));
+                            setSavedMessage("");
+                          }}
+                          accent={accent}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </Card>
 
                 {ENTITLEMENT_GROUPS.map((group) => (
@@ -369,6 +414,7 @@ export function OwnerPanel({ t, accent, activeClient, onClientsChanged }) {
                     setDraftEntitlements(cloneEntitlements(selectedClient.entitlements));
                     setDraftRolloutMode(selectedClient.rollout_mode || "full_production");
                     setDraftProtections(cloneProtections(selectedClient.protections));
+                    setDraftToolRollout(cloneProtections(selectedClient.tool_rollout || selectedClient.protections?.tool_rollout));
                     setSavedMessage("");
                     setError("");
                   }}
