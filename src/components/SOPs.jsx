@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiJson, getActiveClientId } from "../lib/api";
 import { Card, Pill, SectionHeader } from "./ui";
 import { ContentTestModal } from "./ContentTestModal";
+import { PageGuideCard, isSimpleClientMode } from "./SetupGuidance";
 
 function formatTriggerConditions(value) {
   if (!value) return "";
@@ -208,7 +209,7 @@ function SopEditorModal({ sop, issueTypes, t, accent, saving, onChange, onSave, 
   );
 }
 
-export function SOPs({ t, accent }) {
+export function SOPs({ t, accent, activeClient }) {
   const [sops, setSops] = useState([]);
   const [issueTypes, setIssueTypes] = useState([]);
   const [editingSopId, setEditingSopId] = useState(null);
@@ -216,6 +217,7 @@ export function SOPs({ t, accent }) {
   const [error, setError] = useState("");
   const [savingIds, setSavingIds] = useState({});
   const [testingSop, setTestingSop] = useState(null);
+  const simpleMode = isSimpleClientMode(activeClient);
 
   async function load() {
     setLoading(true);
@@ -328,6 +330,25 @@ export function SOPs({ t, accent }) {
         title="SOPs"
         sub="SOPs are detailed operational workflows. The AI classifies the Issue Type first, then checks SOPs linked to that Issue Type before falling back to Knowledge Base."
         t={t}
+      />
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="SOP guidance"
+        belongs={[
+          "Operational steps the AI should follow after it knows the issue type.",
+          "Required identifiers, decision branches, and escalation points.",
+          "Plain-English workflows that mirror how your support team actually resolves the issue.",
+        ]}
+        doesntBelong={[
+          "General brand tone or global policy. Keep that in the Playbook.",
+          "Long factual product explanations. Keep those in the Knowledge Base.",
+          "Broad category labels like refund or cancellation. Keep those in Issue Types.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Title: Cancel order before shipment\nTrigger conditions: Customer wants to cancel an order that has not shipped yet.\nInstructions: Confirm the order number, check shipment status, cancel if still eligible, and escalate if the order has already shipped or payment risk is flagged."}
+        simpleModeNote={simpleMode ? "For smaller clients, start with only the top 3 to 5 workflows that cause the most ticket volume or operational risk." : ""}
       />
 
       <Card t={t} style={{ padding: "18px 20px", marginBottom: "20px" }}>

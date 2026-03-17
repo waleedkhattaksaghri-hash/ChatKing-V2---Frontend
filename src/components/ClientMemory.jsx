@@ -7,6 +7,7 @@ import { useApi } from "../lib/useApi";
 import { Card, Pill, SectionHeader, Tag } from "./ui";
 
 import { ContentTestModal } from "./ContentTestModal";
+import { PageGuideCard, isSimpleClientMode } from "./SetupGuidance";
 
 
 
@@ -453,7 +454,7 @@ function MemoryEditorModal({ entry, issueTypes, sops, articles, t, accent, savin
 
 
 
-export function ClientMemory({ t, accent }) {
+export function ClientMemory({ t, accent, activeClient }) {
 
   const clientId = getActiveClientId();
 
@@ -478,6 +479,7 @@ export function ClientMemory({ t, accent }) {
   const [requestError, setRequestError] = useState("");
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const simpleMode = isSimpleClientMode(activeClient);
 
 
 
@@ -705,6 +707,25 @@ export function ClientMemory({ t, accent }) {
 
         )}
 
+      />
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="Client Memory guidance"
+        belongs={[
+          "Repeated client-specific support patterns that reinforce stable SOP or Knowledge Base behavior.",
+          "Known exceptions, phrasing habits, or resolved-case patterns that show up again and again.",
+          "Approved guidance that helps retrieval stay tenant-specific without changing official policy.",
+        ]}
+        doesntBelong={[
+          "The main source of truth for policy or facts. Keep that in SOPs or the Knowledge Base.",
+          "One-off ticket notes that will never be reused.",
+          "General brand behavior or escalation rules. Keep those in the Playbook or Issue Types.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Type: resolved_case\nTitle: Delivered but not received flow\nSummary: If tracking says delivered, confirm the address and ask whether a household member, front desk, or mailroom accepted it before escalating for carrier review."}
+        simpleModeNote={simpleMode ? "Leave this for later unless the client already has clean SOPs and a published Knowledge Base. Memory helps most after the core setup is stable." : ""}
       />
 
 

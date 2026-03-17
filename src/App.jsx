@@ -21,6 +21,7 @@ import { OwnerPanel } from "./components/OwnerPanel";
 import { AdminStats } from "./components/AdminStats";
 import { AdminLoginScreen } from "./components/AdminLoginScreen";
 import { RichTextEditor } from "./components/RichTextEditor";
+import { PageGuideCard, isSimpleClientMode } from "./components/SetupGuidance";
 import { Card, JobStatusNotice, Pill, SectionHeader, Tag, Toggle } from "./components/ui";
 import { useApi } from "./lib/useApi";
 import { richTextToPlainText } from "./lib/richText";
@@ -374,6 +375,7 @@ function ThemePanel({ darkMode, setDarkMode, accentIdx, setAccentIdx, fontIdx, s
 }
 
 function AgentOverview({ t, accent, defaultSub, activeClient }) {
+  const simpleMode = isSimpleClientMode(activeClient);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savingKey, setSavingKey] = useState("");
@@ -976,6 +978,25 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
           </div>
         </div>
       </Card>
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="Playbook guidance"
+        belongs={[
+          "Bot identity, business context, escalation rules, tone, capabilities, and global response behavior.",
+          "The standing rules the AI should follow before it looks at SOPs or Knowledge Base content.",
+          "Short operational guidance that applies across many conversations.",
+        ]}
+        doesntBelong={[
+          "Detailed step-by-step workflows. Put those in SOPs.",
+          "Long factual customer answers. Put those in the Knowledge Base.",
+          "Repeated client-specific edge cases. Put those in Client Memory later.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Business Context: We never promise a refund until eligibility is verified.\nEscalations: Escalate suspected fraud, legal threats, and payment disputes.\nTone: Warm and direct in chat, concise and structured in email."}
+        simpleModeNote={simpleMode ? "Keep the playbook short for smaller clients. The goal is one clear operating document, not a second knowledge base." : ""}
+      />
 
       <div style={{ display: "grid", gap: "14px" }}>
         <SectionBar id="identity" title="Core Settings" description="Bot identity, greeting, fallback behavior, confidence threshold, and optional per-channel response delays." preview={`${botName}. Greeting: ${greeting} Fallback: ${fallback} Delays: chat ${responseDelayChatMs}ms, email ${responseDelayEmailMs}ms, WhatsApp ${responseDelayWhatsAppMs}ms`} />
@@ -1762,19 +1783,19 @@ export default function ChatKing() {
 
   function renderContent() {
     const subTab = getSubTab();
-    if (nav === "overview")    return <Overview t={t} accent={accent} />;
+    if (nav === "overview")    return <Overview t={t} accent={accent} activeClient={activeClient} onNavigate={setNav} />;
     if (isAgentTab)             return <AgentOverview t={t} accent={accent} defaultSub={subTab} activeClient={activeClient} />;
-    if (nav === "issue-types") return <IssueTypes t={t} accent={accent} />;
-    if (nav === "sops")        return <SOPs t={t} accent={accent} />;
-    if (nav === "knowledge")   return <KnowledgeBase t={t} accent={accent} />;
-    if (nav === "client-memory") return <ClientMemory t={t} accent={accent} />;
-    if (nav === "ai-test")     return <AITestPanel t={t} accent={accent} />;
-    if (nav === "tools")       return <Tools t={t} accent={accent} />;
+    if (nav === "issue-types") return <IssueTypes t={t} accent={accent} activeClient={activeClient} />;
+    if (nav === "sops")        return <SOPs t={t} accent={accent} activeClient={activeClient} />;
+    if (nav === "knowledge")   return <KnowledgeBase t={t} accent={accent} activeClient={activeClient} />;
+    if (nav === "client-memory") return <ClientMemory t={t} accent={accent} activeClient={activeClient} />;
+    if (nav === "ai-test")     return <AITestPanel t={t} accent={accent} activeClient={activeClient} />;
+    if (nav === "tools")       return <Tools t={t} accent={accent} activeClient={activeClient} />;
     if (nav === "admin-stats") return <AdminStats t={t} accent={accent} />;
     if (nav === "insights")    return <Insights t={t} accent={accent} entitlements={activeEntitlements} />;
     if (nav === "tickets")     return <Tickets t={t} accent={accent} />;
     if (nav === "automation")  return <Automation t={t} accent={accent} />;
-    if (nav === "evaluations") return <Evaluations t={t} accent={accent} evaluatedIds={evaluatedIds} setEvaluatedIds={setEvaluatedIds} />;
+    if (nav === "evaluations") return <Evaluations t={t} accent={accent} activeClient={activeClient} evaluatedIds={evaluatedIds} setEvaluatedIds={setEvaluatedIds} />;
     if (nav === "reviews")     return <Reviews t={t} accent={accent} />;
     if (nav === "companies")   return <Companies t={t} accent={accent} activeClient={activeClient} onActivateClient={handleActivateClient} onClientsChanged={loadClients} />;
     if (nav === "channels")    return <Channels t={t} accent={accent} />;

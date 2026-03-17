@@ -1,6 +1,7 @@
 import { getActiveClientId } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Card, SectionHeader } from "./ui";
+import { SetupChecklistCard } from "./SetupGuidance";
 function StatCard({ label, value, sub, color, icon, trend, t, accent }) {
   return (
     <Card t={t} style={{ padding: "20px 22px" }}>
@@ -36,7 +37,7 @@ function MiniBar({ value, max, color }) {
   );
 }
 
-export function Overview({ t, accent }) {
+export function Overview({ t, accent, activeClient, onNavigate }) {
   const clientId = getActiveClientId();
   const { data: a7  } = useApi(`/api/analytics?client_id=${clientId}&days=7`,  null);
   const { data: a30 } = useApi(`/api/analytics?client_id=${clientId}&days=30`, null);
@@ -66,6 +67,7 @@ export function Overview({ t, accent }) {
   return (
     <div>
       <SectionHeader title="Overview" sub={`Performance snapshot · Last 7 days`} t={t} />
+      <SetupChecklistCard t={t} accent={accent} activeClient={activeClient} onNavigate={onNavigate} />
 
       {/* KPI grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: "12px", marginBottom: "24px" }}>

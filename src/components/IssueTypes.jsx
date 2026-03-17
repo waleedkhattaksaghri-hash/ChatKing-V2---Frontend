@@ -12,6 +12,7 @@ import {
 } from "../lib/issueTypes";
 import { Card, Pill, SectionHeader } from "./ui";
 import { ContentTestModal } from "./ContentTestModal";
+import { PageGuideCard, isSimpleClientMode } from "./SetupGuidance";
 
 const ISSUE_TYPE_PAGE_FIELDS = [
   "Name",
@@ -293,7 +294,7 @@ function LinkedSopsModal({ issueType, linkedSops, availableSops, selectedSopId, 
   );
 }
 
-export function IssueTypes({ t, accent }) {
+export function IssueTypes({ t, accent, activeClient }) {
   const [rows, setRows] = useState([]);
   const [sops, setSops] = useState([]);
   const [editingRowId, setEditingRowId] = useState(null);
@@ -301,6 +302,7 @@ export function IssueTypes({ t, accent }) {
   const [savingIds, setSavingIds] = useState({});
   const [errorsById, setErrorsById] = useState({});
   const [requestError, setRequestError] = useState("");
+  const simpleMode = isSimpleClientMode(activeClient);
   const [managingLinksRowId, setManagingLinksRowId] = useState(null);
   const [selectedLinkSopId, setSelectedLinkSopId] = useState("");
   const [linkLoading, setLinkLoading] = useState(false);
@@ -469,6 +471,25 @@ export function IssueTypes({ t, accent }) {
         title="Issue Types"
         sub="Define the minimal issue-type signals the classifier needs. Keep them compact so routing stays accurate and cheap."
         t={t}
+      />
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="Issue Type guidance"
+        belongs={[
+          "Broad support categories like cancellation, refund request, late delivery, or damaged item.",
+          "Short plain-English descriptions that help classification and routing.",
+          "Escalation triggers or special handling signals tied to the category.",
+        ]}
+        doesntBelong={[
+          "Step-by-step workflows or policies. Put those in SOPs.",
+          "Long factual answers for customers. Put those in the Knowledge Base.",
+          "Repeated client-specific edge cases. Put those in Client Memory later.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Issue Type: Refund Request\nDescription: Customer wants money returned for an order, charge, or subscription.\nEscalation rules: Escalate if fraud is suspected or if the refund exceeds the normal policy threshold."}
+        simpleModeNote={simpleMode ? "Start with 5 to 10 issue types max. If two categories feel very similar, merge them until your first live conversations classify cleanly." : ""}
       />
 
       <Card t={t} style={{ padding: "18px 20px", marginBottom: "20px" }}>

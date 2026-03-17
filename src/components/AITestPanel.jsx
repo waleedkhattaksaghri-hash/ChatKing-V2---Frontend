@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch, apiJson, getActiveClientId } from "../lib/api";
 import { Card, Pill, SectionHeader } from "./ui";
+import { PageGuideCard } from "./SetupGuidance";
 
 function formatSessionTitle(session) {
   if (!session) return "New session";
@@ -313,6 +314,24 @@ export function AITestPanel({ t, accent }) {
         title="AI Test"
         sub="Start real test sessions for chat or email, then send multiple customer messages through the same backend logic your live agent uses. This is for end-to-end behavior testing, not one-off prompt previews."
         t={t}
+      />
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="AI Test guidance"
+        belongs={[
+          "Realistic multi-turn conversations that prove the whole setup works together.",
+          "Tests for answer, clarify, escalate, guardrails, and continuity behavior.",
+          "Final checks before pilot or production rollout.",
+        ]}
+        doesntBelong={[
+          "Authoring source-of-truth content. Use Playbook, SOPs, KB, and Memory for that.",
+          "One-line prompt experiments that ignore the actual retrieval pipeline.",
+          "Regression coverage across many saved cases. Use Evaluations for that.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Customer: I need to cancel my order.\nFollow-up: Here is my order number 22194.\nWhat to check: Did the agent ask for the right identifier first, stay conversational, and then follow the cancellation SOP once the identifier was provided?"}
       />
 
       <Card t={t} style={{ padding: "18px 20px", marginBottom: "20px" }}>

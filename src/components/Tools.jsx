@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch, apiJson, getActiveClientId } from "../lib/api";
 import { runBackgroundJobFlow } from "../lib/backgroundJobs";
 import { Card, JobStatusNotice, SectionHeader } from "./ui";
+import { PageGuideCard, isSimpleClientMode } from "./SetupGuidance";
 
 const TOOL_TYPE_META = {
   api:             { label: "API",             color: "#60A5FA" },
@@ -649,8 +650,9 @@ function ToolTestModal({ tool, t, accent, onClose }) {
 }
 
 // ── Main Tools component ──────────────────────────────────────────────────────
-export function Tools({ t, accent }) {
+export function Tools({ t, accent, activeClient }) {
   const clientId = getActiveClientId();
+  const simpleMode = isSimpleClientMode(activeClient);
   const [tools, setTools]               = useState([]);
   const [loading, setLoading]           = useState(true);
   const [tab, setTab]                   = useState("tools");   // "tools" | "registry" | "suggested"
@@ -717,6 +719,11 @@ export function Tools({ t, accent }) {
   useEffect(() => { loadTools(); }, []);
   useEffect(() => { if (tab === "registry") loadRegistry(); }, [tab]);
   useEffect(() => { if (tab === "suggested") loadSuggestions(); }, [tab]);
+  useEffect(() => {
+    if (simpleMode && tab !== "tools") {
+      setTab("tools");
+    }
+  }, [simpleMode, tab]);
 
   async function handleSave(form) {
     if (editTool) {
@@ -757,13 +764,19 @@ export function Tools({ t, accent }) {
           t={t}
         />
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {simpleMode && (
+            <div style={{ padding: "8px 12px", borderRadius: "8px", background: `${accent}12`, border: `1px solid ${accent}28`, color: t.textSub, fontSize: "11px", fontWeight: "700" }}>
+              Start with read-only tools first
+            </div>
+          )}
           <div style={{ display: "flex", background: t.surface, border: `1px solid ${t.border}`,
             borderRadius: "8px", overflow: "hidden" }}>
             {[{ key: "tools", label: "Tools" }, { key: "registry", label: "Registry" }, { key: "suggested", label: "✦ Suggested" }].map(v => (
               <button key={v.key} onClick={() => setTab(v.key)} style={{
                 padding: "7px 16px", background: tab === v.key ? accent : "transparent",
                 border: "none", color: tab === v.key ? "#fff" : t.textMuted,
-                fontSize: "12px", fontWeight: "600", cursor: "pointer", transition: "all 0.15s" }}>
+                fontSize: "12px", fontWeight: "600", cursor: "pointer", transition: "all 0.15s",
+                display: simpleMode && v.key !== "tools" ? "none" : undefined }}>
                 {v.label}
               </button>
             ))}
@@ -777,6 +790,25 @@ export function Tools({ t, accent }) {
           )}
         </div>
       </div>
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="Tools guidance"
+        belongs={[
+          "Safe lookups, integrations, and verified actions the AI may use during support conversations.",
+          "Tools that return structured data or perform approved external actions.",
+          "Only the capabilities you want this client to use live.",
+        ]}
+        doesntBelong={[
+          "Core business rules or policies. Keep those in Playbook, SOPs, and the Knowledge Base.",
+          "High-risk action tools without confirmation and verification.",
+          "Experimental integrations the client is not ready to expose to live traffic.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Read-only tool: Lookup order status by order number.\nWhy it works: It improves answers safely without letting the AI issue refunds, cancel subscriptions, or change account data."}
+        simpleModeNote={simpleMode ? "Simple mode softens this page by emphasizing the main tools list and encouraging read-only tools first." : ""}
+      />
 
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "12px", marginBottom: "20px" }}>

@@ -5,6 +5,7 @@ import { useApi } from "../lib/useApi";
 import { AIInsightsPanel } from "./AIInsightsPanel";
 import { Card, JobStatusNotice, SectionHeader, Tag } from "./ui";
 import { ContentTestModal } from "./ContentTestModal";
+import { PageGuideCard, isSimpleClientMode } from "./SetupGuidance";
 
 function ArticleEditModal({ article, isPublished, t, accent, onSave, onClose }) {
   const [title,   setTitle]   = useState(article.title   || "");
@@ -119,7 +120,7 @@ function ArticleEditModal({ article, isPublished, t, accent, onSave, onClose }) 
 // ══════════════════════════════════════════════════════════════════════════════
 // SECTION: KNOWLEDGE BASE
 // ══════════════════════════════════════════════════════════════════════════════
-export function KnowledgeBase({ t, accent }) {
+export function KnowledgeBase({ t, accent, activeClient }) {
   const [search, setSearch]           = useState("");
   const [editingArticle, setEditingArticle] = useState(null);
   const [articles, setArticles]       = useState([]);
@@ -142,6 +143,7 @@ export function KnowledgeBase({ t, accent }) {
   const [authCookie, setAuthCookie]       = useState("");
   const [authUser, setAuthUser]           = useState("");
   const [authPass, setAuthPass]           = useState("");
+  const simpleMode = isSimpleClientMode(activeClient);
 
   const clientId = getActiveClientId();
   const { data: rawArticles, refetch: refetchArticles } = useApi(`/api/knowledge?client_id=${clientId}`, null);
@@ -334,6 +336,25 @@ export function KnowledgeBase({ t, accent }) {
       <p style={{ fontSize: "12px", color: t.textSub, marginBottom: "20px" }}>
         Drafts are never visible to customers until published. AI-suggested drafts expire after 30 days if not published.
       </p>
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="Knowledge Base guidance"
+        belongs={[
+          "Stable factual answers, published help content, policies, and product information.",
+          "Content that should stay true across many conversations and channels.",
+          "Articles you want retrieval to cite before the model improvises.",
+        ]}
+        doesntBelong={[
+          "Step-by-step operational workflows. Put those in SOPs.",
+          "Routing categories or escalation triggers. Put those in Issue Types or the Playbook.",
+          "Client-specific habits or exceptions. Put those in Client Memory if they repeat.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Title: Subscription cancellation policy\nContent: Customers can cancel their subscription at any time from the billing portal. Cancellation stops future renewals but does not refund the current billing period unless local law or an approved support exception applies."}
+        simpleModeNote={simpleMode ? "Start with the top customer-policy answers first. A smaller published set with clear wording is better than a large mixed-quality library." : ""}
+      />
 
       <JobStatusNotice job={jobNotice} t={t} accent={accent} />
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiJson, getActiveClientId } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Card, Pill, SectionHeader, Tag, Toggle } from "./ui";
+import { PageGuideCard, isSimpleClientMode } from "./SetupGuidance";
 
 const EMPTY_CASE = {
   name: "",
@@ -94,8 +95,9 @@ function metricCard({ label, value, hint, t, accent }) {
   );
 }
 
-export function Evaluations({ t, accent }) {
+export function Evaluations({ t, accent, activeClient }) {
   const clientId = getActiveClientId();
+  const simpleMode = isSimpleClientMode(activeClient);
   const [form, setForm] = useState(EMPTY_CASE);
   const [submitting, setSubmitting] = useState(false);
   const [runPending, setRunPending] = useState(false);
@@ -238,6 +240,25 @@ export function Evaluations({ t, accent }) {
             </button>
           </div>
         }
+      />
+
+      <PageGuideCard
+        t={t}
+        accent={accent}
+        title="Evaluation guidance"
+        belongs={[
+          "Repeatable regression cases with expected issue type, decision mode, and source usage.",
+          "High-risk flows you want to rerun after behavior, policy, or retrieval changes.",
+          "Checks that explain whether the system got safer or worse over time.",
+        ]}
+        doesntBelong={[
+          "Exploratory conversations. Use AI Test for those.",
+          "Raw policy content or workflows. Keep that in Playbook, SOPs, and Knowledge Base.",
+          "Cases without a clear expected outcome.",
+        ]}
+        exampleTitle="Good example"
+        exampleText={"Case: Cancel order requires order number\nInput: I need to cancel my order.\nExpected decision: clarify\nExpected issue type: Order Cancellation\nExpected SOP: Cancel order policy"}
+        simpleModeNote={simpleMode ? "For smaller clients, start with a compact eval pack covering the highest-risk mistakes before building a larger regression suite." : ""}
       />
 
       {(error || success) && (
