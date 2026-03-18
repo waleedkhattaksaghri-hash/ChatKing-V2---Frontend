@@ -408,6 +408,13 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     const [toneEmail,   setToneEmail,   undoToneEmail,   canUndoToneEmail  ] = useUndoState("Professional, warm, and structured. Start with a clear greeting, explain the answer in 2 to 4 short paragraphs, and end with a helpful next step. Use policy-backed wording and avoid overly robotic phrasing.");
     const [toneWA,      setToneWA,      undoToneWA,      canUndoToneWA     ] = useUndoState("Conversational and brief. Keep replies under 100 words when possible, stay clear and helpful, and use emojis rarely.");
 
+  const [guardrailConfig, setGuardrailConfig] = useState({
+    escalation_keywords: [],
+    clarification_limit: 2,
+    required_fields: ["order_number", "tracking_number", "account_email"],
+    disable_required_fields: false,
+  });
+
   const [allowedText, setAllowedText, undoAllowed,     canUndoAllowed    ] = useUndoState(
   `Answer order status questions using verified tracking or fulfillment status
   Explain return, refund, shipping, and promotion policies from approved SOPs and Knowledge Base articles
@@ -428,6 +435,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
   const escalationsRef = useRef(null);
   const toneRef = useRef(null);
   const capabilitiesRef = useRef(null);
+  const guardrailsRef = useRef(null);
   const activeClientId = activeClient?.id || getActiveClientId();
 
   function applySettingsSnapshot(s) {
@@ -446,6 +454,12 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       toneWA: s.tone_whatsapp ?? toneWA,
       allowedText: s.capabilities_allowed ?? allowedText,
       blockedText: s.capabilities_blocked ?? blockedText,
+      guardrailConfig: (s.guardrail_config && typeof s.guardrail_config === "object") ? {
+        escalation_keywords: s.guardrail_config.escalation_keywords ?? [],
+        clarification_limit: s.guardrail_config.clarification_limit ?? 2,
+        required_fields: s.guardrail_config.required_fields ?? ["order_number", "tracking_number", "account_email"],
+        disable_required_fields: s.guardrail_config.disable_required_fields ?? false,
+      } : guardrailConfig,
     };
 
     setBotName(nextSnapshot.botName);
@@ -462,6 +476,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     setToneWA(nextSnapshot.toneWA);
     setAllowedText(nextSnapshot.allowedText);
     setBlockedText(nextSnapshot.blockedText);
+    setGuardrailConfig(nextSnapshot.guardrailConfig);
     setSnapshot(nextSnapshot);
     setSaved(false);
   }
@@ -512,8 +527,11 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       return !sameValue(allowedText, snapshot.allowedText)
         || !sameValue(blockedText, snapshot.blockedText);
     }
+    if (sectionId === "guardrails") {
+      return JSON.stringify(guardrailConfig) !== JSON.stringify(snapshot.guardrailConfig);
+    }
 
-    return ["identity", "context", "escalations", "tone", "capabilities"].some((key) => isSectionDirty(key));
+    return ["identity", "context", "escalations", "tone", "capabilities", "guardrails"].some((key) => isSectionDirty(key));
   }
 
   function buildSavePayload(section = "all") {
@@ -543,6 +561,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       payload.capabilities_allowed = allowedText;
       payload.capabilities_blocked = blockedText;
     }
+    if (section === "all" || section === "guardrails") {
+      payload.guardrail_config = guardrailConfig;
+    }
 
     return payload;
   }
@@ -562,6 +583,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     }
     if (sectionId === "capabilities") {
       return { allowedText, blockedText };
+    }
+    if (sectionId === "guardrails") {
+      return { guardrailConfig: JSON.parse(JSON.stringify(guardrailConfig)) };
     }
     return {};
   }
@@ -591,6 +615,9 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     if (sectionId === "capabilities") {
       if (snapshot.allowedText !== undefined) setAllowedText(snapshot.allowedText);
       if (snapshot.blockedText !== undefined) setBlockedText(snapshot.blockedText);
+    }
+    if (sectionId === "guardrails") {
+      if (snapshot.guardrailConfig !== undefined) setGuardrailConfig(snapshot.guardrailConfig);
     }
   }
 
@@ -663,6 +690,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
     setToneWA(snapshot.toneWA);
     setAllowedText(snapshot.allowedText);
     setBlockedText(snapshot.blockedText);
+    setGuardrailConfig(snapshot.guardrailConfig);
   }
 
   const taStyle = {
@@ -899,6 +927,84 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
       );
     }
 
+    if (editorSection === "guardrails") {
+      const keywordsText = (guardrailConfig.escalation_keywords || []).join("\n");
+      const allFields = ["order_number", "tracking_number", "account_email"];
+      const enabledFields = guardrailConfig.required_fields || allFields;
+      const fieldLabels = { order_number: "Order Number", tracking_number: "Tracking Number", account_email: "Account Email" };
+
+      return (
+        <div ref={guardrailsRef} style={{ scrollMarginTop: "96px" }}>
+          <FieldHeader title="Guardrails" canUndo={false} saveSectionId="guardrails" />
+          <p style={{ ...guideStyle, marginBottom: "20px" }}>Control the deterministic rules the agent enforces before any AI response is generated. These run automatically on every message.</p>
+
+          <div style={{ display: "grid", gap: "24px" }}>
+
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>Custom Escalation Keywords</div>
+              <p style={{ ...guideStyle, marginBottom: "10px" }}>One keyword or phrase per line. Any message matching these will force an escalation to a human, in addition to the built-in security patterns.</p>
+              <textarea
+                value={keywordsText}
+                onChange={(e) => setGuardrailConfig((prev) => ({ ...prev, escalation_keywords: e.target.value.split("\n").map((k) => k.trim()).filter(Boolean) }))}
+                placeholder={"lawsuit\nattorney\ncharge back\nthreat"}
+                style={{ width: "100%", minHeight: "120px", background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "10px", color: t.text, fontSize: "13px", padding: "12px 14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>Clarification Attempt Limit</div>
+              <p style={{ ...guideStyle, marginBottom: "10px" }}>How many times the agent can ask for missing information before escalating to a human. Default is 2.</p>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={guardrailConfig.clarification_limit ?? 2}
+                  onChange={(e) => setGuardrailConfig((prev) => ({ ...prev, clarification_limit: Math.max(1, Math.min(10, Number(e.target.value) || 1)) }))}
+                  style={{ width: "80px", background: t.surfaceHover, border: `1px solid ${t.border}`, borderRadius: "8px", color: t.text, fontSize: "14px", fontWeight: "700", padding: "9px 12px", textAlign: "center" }}
+                />
+                <span style={{ fontSize: "13px", color: t.textSub }}>attempts before escalating</span>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>Required Information Fields</div>
+              <p style={{ ...guideStyle, marginBottom: "12px" }}>When these are enabled, the agent will ask the customer for this information when it detects a relevant request. Uncheck to disable collection for that field type.</p>
+              <div style={{ display: "grid", gap: "10px", marginBottom: "14px" }}>
+                {allFields.map((field) => (
+                  <label key={field} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", opacity: guardrailConfig.disable_required_fields ? 0.4 : 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={!guardrailConfig.disable_required_fields && enabledFields.includes(field)}
+                      disabled={guardrailConfig.disable_required_fields}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...new Set([...enabledFields, field])]
+                          : enabledFields.filter((f) => f !== field);
+                        setGuardrailConfig((prev) => ({ ...prev, required_fields: next }));
+                      }}
+                      style={{ width: "16px", height: "16px", accentColor: accent, cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: "13px", color: t.text, fontWeight: "600" }}>{fieldLabels[field]}</span>
+                  </label>
+                ))}
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", paddingTop: "10px", borderTop: `1px solid ${t.border}` }}>
+                <input
+                  type="checkbox"
+                  checked={!!guardrailConfig.disable_required_fields}
+                  onChange={(e) => setGuardrailConfig((prev) => ({ ...prev, disable_required_fields: e.target.checked }))}
+                  style={{ width: "16px", height: "16px", accentColor: "#EF4444", cursor: "pointer" }}
+                />
+                <span style={{ fontSize: "13px", color: "#EF4444", fontWeight: "600" }}>Disable all required field collection</span>
+              </label>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
     return null;
   }
 
@@ -1004,6 +1110,7 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
         <SectionBar id="escalations" title="Escalations" description="The situations where the AI must stop and hand the ticket to a human." preview={escalationsText} />
         <SectionBar id="tone" title="Tone & Style" description="Channel-specific response style for chat, email, and WhatsApp." preview={`Chat: ${toneChat} Email: ${toneEmail} WhatsApp: ${toneWA}`} />
         <SectionBar id="capabilities" title="Capabilities" description="What the agent is allowed to do, and what it must never do on its own." preview={`Allowed: ${allowedText} Blocked: ${blockedText}`} />
+        <SectionBar id="guardrails" title="Guardrails" description="Deterministic escalation rules, clarification limits, and required information fields enforced before every AI response." preview={`Escalation keywords: ${(guardrailConfig.escalation_keywords || []).join(", ") || "none"} | Clarification limit: ${guardrailConfig.clarification_limit ?? 2} | Required fields: ${guardrailConfig.disable_required_fields ? "disabled" : (guardrailConfig.required_fields || []).join(", ")}`} />
       </div>
 
       {editorSection && (
@@ -1024,7 +1131,8 @@ function AgentOverview({ t, accent, defaultSub, activeClient }) {
                     editorSection === "context" ? "Business Context" :
                     editorSection === "escalations" ? "Escalations" :
                     editorSection === "tone" ? "Tone & Style" :
-                    editorSection === "capabilities" ? "Capabilities" : "Edit Section"}
+                    editorSection === "capabilities" ? "Capabilities" :
+                    editorSection === "guardrails" ? "Guardrails" : "Edit Section"}
                 </div>
                 <div style={{ fontSize: "12px", color: t.textSub, marginTop: "4px" }}>
                   Edit the full section here. Saving still uses the existing linked settings payload.
