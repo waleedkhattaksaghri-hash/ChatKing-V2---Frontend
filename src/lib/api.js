@@ -121,6 +121,20 @@ export async function loginAdminSession(token) {
   });
 }
 
+export async function loginWithPassword(email, password) {
+  return apiJson("/api/admin/session/login", {
+    method: "POST",
+    body: { email, password },
+  });
+}
+
+export async function setAccountPassword(password) {
+  return apiJson("/api/admin/session/set-password", {
+    method: "POST",
+    body: { password },
+  });
+}
+
 export async function logoutAdminSession() {
   return apiJson("/api/admin/session", {
     method: "DELETE",

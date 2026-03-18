@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { apiFetch, apiJson, getActiveClientId, getAdminSessionStatus, getConfigWarning, loginAdminSession, logoutAdminSession, requestAdminLoginCode, setActiveClientId, verifyAdminLoginCode } from "./lib/api";
+import { apiFetch, apiJson, getActiveClientId, getAdminSessionStatus, getConfigWarning, loginAdminSession, loginWithPassword, logoutAdminSession, requestAdminLoginCode, setActiveClientId, verifyAdminLoginCode } from "./lib/api";
 import { runBackgroundJobFlow } from "./lib/backgroundJobs";
 import { AIInsightsPanel } from "./components/AIInsightsPanel";
 import { KnowledgeBase } from "./components/KnowledgeBase";
@@ -1745,6 +1745,16 @@ export default function ChatKing() {
     return session;
   }
 
+  async function handlePasswordLogin(email, password) {
+    const session = await loginWithPassword(email, password);
+    setAuthenticated(!!session?.authenticated);
+    setAuthSession(session?.authenticated ? session : null);
+    if (session?.authenticated) {
+      await loadClients();
+    }
+    return session;
+  }
+
   async function handleLegacyTokenLogin(token) {
     const session = await loginAdminSession(token);
     setAuthenticated(!!session?.authenticated);
@@ -1880,6 +1890,7 @@ export default function ChatKing() {
         onRequestCode={handleRequestLoginCode}
         onVerifyCode={handleVerifyLoginCode}
         onLegacyLogin={handleLegacyTokenLogin}
+        onPasswordLogin={handlePasswordLogin}
       />
     );
   }
